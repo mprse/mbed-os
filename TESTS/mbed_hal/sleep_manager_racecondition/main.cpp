@@ -14,42 +14,44 @@
  * limitations under the License.
  */
 
+#if !DEVICE_SLEEP
+#error [NOT SUPPORTED] sleep not supported for this target
+#endif
+
 #include "utest/utest.h"
 #include "unity/unity.h"
 #include "greentea-client/test_env.h"
 
-#if !DEVICE_SLEEP
-#error [NOT_SUPPORTED] test not supported
-#endif
+#include "sleep_api_tests.h"
 
 using namespace utest::v1;
-
-#define TEST_STACK_SIZE 256
 
 void sleep_manager_locking_thread_test()
 {
     for (uint32_t i = 0; i < 100; i++) {
         sleep_manager_lock_deep_sleep();
-        Thread::wait(25);
+        Thread::wait(50);
+
         sleep_manager_unlock_deep_sleep();
     }
 }
 
 void sleep_manager_multithread_test()
 {
-    {
-        Callback<void()> cb(sleep_manager_locking_thread_test);
-        Thread t1(osPriorityNormal, TEST_STACK_SIZE);
-        Thread t2(osPriorityNormal, TEST_STACK_SIZE);
+    Callback<void()> cb(sleep_manager_locking_thread_test);
+    Thread *t1 = new Thread;
+    Thread *t2 = new Thread;
 
-        t1.start(callback(cb));
-        Thread::wait(25);
-        t2.start(callback(cb));
+    t1->start(callback(cb));
+    Thread::wait(25);
+    t2->start(callback(cb));
 
-        // Wait for the threads to finish
-        t1.join();
-        t2.join();
-    }
+    // Wait for the threads to finish
+    t1->join();
+    t2->join();
+
+    delete t1;
+    delete t2;
 
     bool deep_sleep_allowed = sleep_manager_can_deep_sleep();
     TEST_ASSERT_TRUE_MESSAGE(deep_sleep_allowed, "Deep sleep should be allowed");
@@ -63,21 +65,20 @@ void sleep_manager_locking_irq_test()
 
 void sleep_manager_irq_test()
 {
-    {
-        Ticker ticker1;
-        Timer timer;
+    Ticker *ticker1 = new Ticker;
+    Timer timer;
 
-        ticker1.attach_us(&sleep_manager_locking_irq_test, 500);
+    ticker1->attach_us(&sleep_manager_locking_irq_test, 500);
 
-        // run this for 5 seconds
-        timer.start();
-        int start = timer.read();
-        int end = start + 5;
-        while (timer.read() < end) {
-            sleep_manager_locking_irq_test();
-        }
-        timer.stop();
+    // run this for 5 seconds
+    timer.start();
+    int start = timer.read();
+    int end = start + 5;
+    while (timer.read() < end) {
+        sleep_manager_locking_irq_test();
     }
+
+    delete ticker1;
 
     bool deep_sleep_allowed = sleep_manager_can_deep_sleep();
     TEST_ASSERT_TRUE_MESSAGE(deep_sleep_allowed, "Deep sleep should be allowed");

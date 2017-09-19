@@ -13,15 +13,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+#if !DEVICE_SLEEP
+#error [NOT SUPPORTED] sleep not supported for this target
+#endif
+
 #include "utest/utest.h"
 #include "unity/unity.h"
 #include "greentea-client/test_env.h"
 
-#if !DEVICE_SLEEP
-#error [NOT_SUPPORTED] test not supported
-#endif
+#include "sleep_api_tests.h"
 
 using namespace utest::v1;
+
+// used for regular sleep modes, a target should be awake within 12 us (10 us + margin)
+static const uint32_t sleep_tolerance_sleep_mode = 12;
+// used for deepsleep, a target should be awake within 200 us
+static const uint32_t sleep_tolerance_deep_sleep_mode = 200;
 
 void sleep_manager_deepsleep_counter_test()
 {
@@ -32,6 +40,13 @@ void sleep_manager_deepsleep_counter_test()
     deep_sleep_allowed = sleep_manager_can_deep_sleep();
     TEST_ASSERT_FALSE(deep_sleep_allowed);
 
+    sleep_manager_unlock_deep_sleep();
+    deep_sleep_allowed = sleep_manager_can_deep_sleep();
+    TEST_ASSERT_TRUE(deep_sleep_allowed);
+
+    // should not underflow
+    sleep_manager_unlock_deep_sleep();
+    sleep_manager_unlock_deep_sleep();
     sleep_manager_unlock_deep_sleep();
     deep_sleep_allowed = sleep_manager_can_deep_sleep();
     TEST_ASSERT_TRUE(deep_sleep_allowed);
