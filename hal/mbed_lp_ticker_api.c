@@ -19,6 +19,8 @@
 
 static ticker_event_queue_t events = { 0 };
 
+static TICKER_IRQ_HANDLER_TYPE irq_handler = ticker_irq_handler;
+
 static const ticker_interface_t lp_interface = {
     .init = lp_ticker_init,
     .read = lp_ticker_read,
@@ -39,9 +41,16 @@ const ticker_data_t* get_lp_ticker_data(void)
     return &lp_data;
 }
 
+void set_lp_ticker_irq_handler(TICKER_IRQ_HANDLER_TYPE ticker_irq_handler)
+{
+    irq_handler = ticker_irq_handler;
+}
+
 void lp_ticker_irq_handler(void)
 {
-    ticker_irq_handler(&lp_data);
+    if(irq_handler != 0) {
+        irq_handler(&lp_data);
+    }
 }
 
 #endif

@@ -34,6 +34,15 @@ extern "C" {
  * @{
  */
 
+typedef void (*TICKER_IRQ_HANDLER_TYPE)(const ticker_data_t *const);
+
+/** Set low power ticker IRQ handler
+ *
+ * @param ticker_irq_handler IRQ handler to be connected
+ *
+ */
+void set_lp_ticker_irq_handler(TICKER_IRQ_HANDLER_TYPE ticker_irq_handler);
+
 /** Get low power ticker's data
  *
  * @return The low power ticker data

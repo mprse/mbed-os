@@ -30,6 +30,15 @@ extern "C" {
  * @{
  */
 
+typedef void (*TICKER_IRQ_HANDLER_TYPE)(const ticker_data_t *const);
+
+/** Set ticker IRQ handler
+ *
+ * @param ticker_irq_handler IRQ handler to be connected
+ *
+ */
+void set_us_ticker_irq_handler(TICKER_IRQ_HANDLER_TYPE ticker_irq_handler);
+
 /** Get ticker's data
  *
  * @return The microsecond ticker data

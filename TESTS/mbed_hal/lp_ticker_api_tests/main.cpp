@@ -19,24 +19,93 @@
 #include "utest.h"
 #include "rtos.h"
 
-void lp_ticker_info_test()
-{
-    const ticker_data_t* lp_ticker_data = get_lp_ticker_data();
-    const ticker_info_t* p_lp_ticker_info = lp_ticker_get_info();
+#if !DEVICE_LOWPOWERTIMER
+#error [NOT_SUPPORTED] test not supported
+#endif
 
-    printf("----> freq: %d \n", (int)p_lp_ticker_info->frequency);
-    printf("----> bits: %d \n", (int)p_lp_ticker_info->bits);
+using namespace utest::v1;
+
+volatile int intFlag = 0;
+
+#define TICKER_INT_VAL 5000
+#define TICKER_DELTA 50
+
+void ticker_event_handler_stub(const ticker_data_t *const ticker)
+{
+    /* Indicate that ISR has been executed in interrupt context. */
+    if(IS_IRQ_MODE()) {
+        intFlag++;
+    }
+
+    /* Clear and disable ticker interrupt. */
+    lp_ticker_clear_interrupt();
+    lp_ticker_disable_interrupt();
 }
 
+/* Test that the ticker has the right frequency and number of bits.
+ *
+ * Given ticker is available.
+ * When ticker information data is obtained.
+ * Then ticker information indicate that frequency frequency between 8KHz and 64KHz and the counter is at least 12 bits wide.
+ */
+void lp_ticker_info_test()
+{
+    const ticker_info_t* p_ticker_info = lp_ticker_get_info();
+
+    /* Check conditions. */
+    TEST_ASSERT(p_ticker_info->frequency >= 8000);
+    TEST_ASSERT(p_ticker_info->frequency <= 64000);
+    TEST_ASSERT(p_ticker_info->bits >= 12);
+}
+
+/* Test that the ticker continues operating in deep sleep mode.
+ *
+ * Given ticker is available.
+ * When ticker has interrupt set and board enters deep-sleep mode.
+ * Then ticker continues operating.
+ */
+void lp_ticker_sleep_test()
+{
+    /* Clear ISR call counter. */
+    intFlag = 0;
+
+    /* Set IRQ handler for lp ticker. */
+    set_lp_ticker_irq_handler(ticker_event_handler_stub);
+
+    /* Init the ticker. */
+    lp_ticker_init();
+
+    /* Wait for green tea UART transmission before entering deep-sleep mode. */
+    wait_ms(100);
+
+    /* Get current tick count. */
+    const uint32_t tick_count = lp_ticker_read();
+
+    /* Set interrupt. Interrupt should be fired when tick count is equal to:
+     * tick_count + TICKER_INT_VAL. */
+    lp_ticker_set_interrupt(tick_count + TICKER_INT_VAL);
+
+    /* Indicate that deep sleep mode is available. */
+    TEST_ASSERT_TRUE(sleep_manager_can_deep_sleep());
+
+    /* Enter deep-sleep mode. */
+    while(!intFlag) {
+        sleep();
+    }
+
+    /* Check if interrupt has been fired. */
+    TEST_ASSERT_EQUAL(1, intFlag);
+}
 
 utest::v1::status_t test_setup(const size_t number_of_cases)
 {
-    GREENTEA_SETUP(10, "default_auto");
+    GREENTEA_SETUP(20, "default_auto");
     return verbose_test_setup_handler(number_of_cases);
 }
 
 Case cases[] = {
-    Case("Test calloc", lp_ticker_info_test),
+    Case("lp ticker info test", lp_ticker_info_test),
+    Case("lp ticker sleep test", lp_ticker_sleep_test),
 };
 
 Specification specification(test_setup, cases);
