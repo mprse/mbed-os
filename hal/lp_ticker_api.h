@@ -49,36 +49,125 @@ void lp_ticker_irq_handler(void);
 
 /** Initialize the low power ticker
  *
+ * Pseudo Code:
+ * @code
+ * void lp_ticker_init()
+ * {
+ *     // Enable clock gate so processor can read LPTMR registers
+ *     POWER_CTRL |= POWER_CTRL_LPTMR_Msk;
+ *
+ *     // Disable the timer and ensure it is powered down
+ *     LPTMR_CTRL &= ~(LPTMR_CTRL_ENABLE_Msk | LPTMR_CTRL_COMPARE_ENABLE_Msk);
+ *
+ *     // Configure divisors - no division necessary
+ *     LPTMR_PRESCALE = 0;
+ *     LPTMR_CTRL |= LPTMR_CTRL_ENABLE_Msk;
+ *
+ *     // Install the interrupt handler
+ *     NVIC_SetVector(LPTMR_IRQn, (uint32_t)lp_ticker_irq_handler);
+ *     NVIC_EnableIRQ(LPTMR_IRQn);
+ * }
+ * @endcode
  */
 void lp_ticker_init(void);
 
 /** Read the current counter
  *
- * @return The current timer's counter value in microseconds
+ * @return The current timer's counter value in ticks
+ *
+ * Pseudo Code:
+ * @code
+ * uint32_t lp_ticker_read()
+ * {
+ *     uint16_t count;
+ *     uint16_t last_count;
+ *
+ *     // Loop until the same tick is read twice since this
+ *     // is ripple counter on a different clock domain.
+ *     count = LPTMR_COUNT;
+ *     do {
+ *         last_count = count;
+ *         count = LPTMR_COUNT;
+ *     } while (last_count != count);
+ *
+ *     return count;
+ * }
+ * @endcode
  */
 uint32_t lp_ticker_read(void);
 
 /** Set interrupt for specified timestamp
  *
- * @param timestamp The time in microseconds to be set
+ * @param timestamp The time in ticks to be set
+ *
+ * @note no special handling needs to be done for times in the past
+ * as the common timer code will detect this and call
+ * ::us_ticker_fire_interrupt if this is the case
+ *
+ * Pseudo Code:
+ * @code
+ * void lp_ticker_set_interrupt(timestamp_t timestamp)
+ * {
+ *     LPTMR_COMPARE = timestamp;
+ *     LPTMR_CTRL |= LPTMR_CTRL_COMPARE_ENABLE_Msk;
+ * }
+ * @endcode
  */
 void lp_ticker_set_interrupt(timestamp_t timestamp);
 
 /** Disable low power ticker interrupt
  *
+ * Pseudo Code:
+ * @code
+ * void lp_ticker_disable_interrupt(void)
+ * {
+ *     // Disable the compare interrupt
+ *     LPTMR_CTRL &= ~LPTMR_CTRL_COMPARE_ENABLE_Msk;
+ * }
+ * @endcode
  */
 void lp_ticker_disable_interrupt(void);
 
 /** Clear the low power ticker interrupt
  *
+ * Pseudo Code:
+ * @code
+ * void lp_ticker_clear_interrupt(void)
+ * {
+ *     // Write to the ICR (interrupt clear register) of the LPTMR
+ *     LPTMR_ICR = LPTMR_ICR_COMPARE_Msk;
+ * }
+ * @endcode
  */
 void lp_ticker_clear_interrupt(void);
 
 /** Set pending interrupt that should be fired right away.
  * 
- * The ticker should be initialized prior calling this function.
+ * Pseudo Code:
+ * @code
+ * void lp_ticker_fire_interrupt(void)
+ * {
+ *     NVIC_SetPendingIRQ(LPTMR_IRQn);
+ * }
+ * @endcode
  */
 void lp_ticker_fire_interrupt(void);
+
+/** Get frequency and counter bits of this ticker.
+ *
+ * Pseudo Code:
+ * @code
+ * const ticker_info_t* lp_ticker_get_info()
+ * {
+ *     static const ticker_info_t info = {
+ *         32768,      // 32KHz
+ *         16          // 16 bit counter
+ *     };
+ *     return &info;
+ * }
+ * @endcode
+ */
+const ticker_info_t* lp_ticker_get_info(void);
 
 /**@}*/
 
