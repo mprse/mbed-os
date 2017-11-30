@@ -18,6 +18,7 @@
 #include "mbed_interface.h"
 #include "softdevice_handler.h"
 #include "nrf_soc.h"
+#include "nrf_timer.h"
 
 // Mask of reserved bits of the register ICSR in the System Control Block peripheral
 // In this case, bits which are equal to 0 are the bits reserved in this register
@@ -25,8 +26,13 @@
 
 #define FPU_EXCEPTION_MASK 0x0000009F
 
-void hal_sleep(void)
+static void sleep_common(bool deepsleep)
 {
+    if (deepsleep) {
+        /* Disable timer used for us ticker. */
+        nrf_timer_task_trigger(NRF_TIMER1, NRF_TIMER_TASK_STOP);
+    }
+
     // ensure debug is disconnected if semihost is enabled....
 
     // Trigger an event when an interrupt is pending. This allows to wake up
@@ -71,10 +77,20 @@ void hal_sleep(void)
             __WFE();
         }
     }
+
+    if (deepsleep) {
+        nrf_timer_task_trigger(NRF_TIMER1, NRF_TIMER_TASK_START);
+    }
+}
+
+
+void hal_sleep(void)
+{
+    sleep_common(false);
 }
 
 void hal_deepsleep(void)
 {
-    hal_sleep();
+    sleep_common(true);
     //   NRF_POWER->SYSTEMOFF=1;
 }
