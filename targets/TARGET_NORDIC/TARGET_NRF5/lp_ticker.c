@@ -14,10 +14,9 @@
  * limitations under the License.
  */
 #include "lp_ticker_api.h"
+#include "common_rtc.h"
 
 #if DEVICE_LOWPOWERTIMER
-
-#include "common_rtc.h"
 
 void lp_ticker_init(void)
 {
@@ -26,7 +25,7 @@ void lp_ticker_init(void)
 
 uint32_t lp_ticker_read()
 {
-    return (uint32_t)common_rtc_64bit_us_get();
+    return common_rtc_32bit_ticks_get();
 }
 
 void lp_ticker_set_interrupt(timestamp_t timestamp)
@@ -37,15 +36,14 @@ void lp_ticker_set_interrupt(timestamp_t timestamp)
 
 void lp_ticker_fire_interrupt(void)
 {
-    uint32_t closest_safe_compare = common_rtc_32bit_ticks_get() + 2;
+    m_common_rtc_interrupt_fire = true;
 
-    nrf_rtc_cc_set(COMMON_RTC_INSTANCE, LP_TICKER_CC_CHANNEL, RTC_WRAP(closest_safe_compare));
-    nrf_rtc_event_enable(COMMON_RTC_INSTANCE, LP_TICKER_INT_MASK);
+    NVIC_SetPendingIRQ(RTC1_IRQn);
 }
 
 void lp_ticker_disable_interrupt(void)
 {
-    nrf_rtc_event_disable(COMMON_RTC_INSTANCE, LP_TICKER_INT_MASK);
+    nrf_rtc_int_disable(COMMON_RTC_INSTANCE, LP_TICKER_INT_MASK);
 }
 
 void lp_ticker_clear_interrupt(void)
