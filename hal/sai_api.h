@@ -25,10 +25,29 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-/** \defgroup hal_sai Serial audio interface hal functions
+/**
+ * \defgroup hal_sai Serial audio interface hal functions
+ * Low level interface to the serial audio interface of a target.
+ *
+ * # Defined behavior
+ * * Supports a subset of the possible configuration space - verified by ::sai_
+ * * Reports a failure (returns false) upon any invocation to an unsupported feature/parameter - verified by ::sai_
+ * * Is able to indicate the currently processed word - verified by ::sai_
+ * # Defined behavior if feature supported
+ * * Is able to change receiver format without interrupting transmitter format - verified by ::sai_
+ * * Is able to change transmitter format without interrupting receiver format - verified by ::sai_
+ * * Is able to change transmitter and receiver format without interrupting the current frame - verified by ::sai_
+ *
+ * @note
+ * A transceiver supporting async rx/tx should be considered as 2 different peripherals :
+ * - one read-only
+ * - one write-only
+ * The first allocated channel may or may not limit the second one's feature.
+ * eg:
+ * In a peripheral that supports async rx/tx but requires format to be the same,
+ * the first allocated instance will set the format and tie the second one to this format.
+ *
  * @{
- * @note Implementations may not support all options,
- * In such cases the call should return `False` to report a failure.
  */
 
 /**
@@ -96,11 +115,14 @@ bool sai_init(sai_t *obj, sai_init_t *init);
 /** Transfer a sample and return the sample received meanwhile. */
 uint32_t sai_xfer(sai_t *obj, uint32_t sample);
 
-/** Changes the format of the receiver channel */
-bool sai_configure_receiver_format(sai_format_t *fmt);
+/** Changes the format of the receiver channel only */
+bool sai_configure_receiver_format(sai_t *obj, sai_format_t *fmt);
 
-/** Changes the format of the transmitter channel */
-bool sai_configure_transmitter_format(sai_format_t *fmt);
+/** Changes the format of the transmitter channel only */
+bool sai_configure_transmitter_format(sai_t *obj, sai_format_t *fmt);
+
+/** Changes the format of both transmitter & receiver */
+bool sai_configure_format(sai_t *obj, sai_format *fmt);
 
 /** Get the current word selection. */
 bool sai_get_word_selection(sai_t *obj);
