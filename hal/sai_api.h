@@ -25,45 +25,58 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+/** \defgroup hal_sai Serial audio interface hal functions
+ * @{
+ * @note Implementations may not support all options,
+ * In such cases the call should return `False` to report a failure.
+ */
 
-typedef enum _sai_synchronicity_e {
-    sai_syncrhonicity_async,
-    sai_syncrhonicity_synced_to_rx,
-    sai_syncrhonicity_synced_to_tx
-} sai_synchronicity_e;
+/**
+ * Used to define how transmitter & receiver are related.
+ */
+typedef enum sai_synchronicity_e {
+    sai_synchronicity_async,
+    sai_synchronicity_synced_to_rx,
+    sai_synchronicity_synced_to_tx
+} sai_synchronicity_t;
 
-
+/**
+ *
+ */
 typedef struct sai_channel_init_s {
   bool          enable;
 
   PinName       sd;
   PinName       bclk;
   PinName       wclk;
-  bool          is_slave; //!< true if it is slave
-  bool          internal_bclk; //!< true to use internal bclock
-  bool          internal_wclk; //!< true to use internal wclock
+  bool          is_slave; /**< true if it is slave */
+  bool          internal_bclk; /**< true to use internal bclock */
+  bool          internal_wclk; /**< true to use internal wclock */
 
   sai_format_t  fmt;
 } sai_channel_init_t;
 
+/**
+ * Used to define communication specs.
+ */
 typedef struct sai_format_s {
-  uint32_t  sample_rate; //!< Typically 44100Hz
+  uint32_t  sample_rate; /**< Typically 44100Hz */
 
-  bool      bclk_polarity; //!< true for Active high
-  bool      wclk_polarity; //!< true for Active high
-  bool      ws_delay; //!< true to toggle ws one bit earlier than the frame
-  uint8_t   ws_length; //!< ws assertion length from 1bclk to word length.
+  bool      bclk_polarity; /**< true for Active high */
+  bool      wclk_polarity; /**< true for Active high */
+  bool      ws_delay; /**< true to toggle ws one bit earlier than the frame */
+  uint8_t   ws_length; /**< ws assertion length from 1bclk to word length. */
 
-  uint8_t   frame_length; //!< Frame length in word count [1; 32]
-  uint32_t  word_mask; //!< Mask on frame for used word (bitfield)
-  uint8_t   word_length; //!< Word length in bits [1; 32]
-  uint8_t   data_length; //!< Data length within the word. This must <= to word_length.
-  bool      lsb_first; //!< true to send lsb first
-  bool      aligned_left; //!< true to align Left
-  uint8_t   bit_shift; //!< sample bit shift distance from its alignment point.
+  uint8_t   frame_length; /**< Frame length in word count [1; 32] */
+  uint32_t  word_mask; /**< Mask on frame for used word (bitfield) */
+  uint8_t   word_length; /**< Word length in bits [1; 32] */
+  uint8_t   data_length; /**< Data length within the word. This must <= to word_length. */
+  bool      lsb_first; /**< true to send lsb first */
+  bool      aligned_left; /**< true to align Left */
+  uint8_t   bit_shift; /**< sample bit shift distance from its alignment point. */
 } sai_format_t;
 
-//! Init structure
+/** Init structure */
 typedef struct sai_init_s {
   sai_synchronicity_e sync; // rx/tx independant(aka async), synced to rx, synced to tx
 
@@ -71,7 +84,7 @@ typedef struct sai_init_s {
   sai_channel_init_t RX;
 } sai_init_t;
 
-// Delegated shadow type
+/** Delegated typedef @see target/ ** /object.h */
 typedef struct sai_s sai_t;
 
 /** Initialize `obj` based on `init` values.
@@ -80,19 +93,19 @@ typedef struct sai_s sai_t;
  */
 bool sai_init(sai_t *obj, sai_init_t *init);
 
-//! Transfer a sample and return the sample received meanwhile.
+/** Transfer a sample and return the sample received meanwhile. */
 uint32_t sai_xfer(sai_t *obj, uint32_t sample);
 
-//! Changes the format of the receiver channel
+/** Changes the format of the receiver channel */
 bool sai_configure_receiver_format(sai_format_t *fmt);
 
-//! Changes the format of the transmitter channel
+/** Changes the format of the transmitter channel */
 bool sai_configure_transmitter_format(sai_format_t *fmt);
 
-//! Get the current word selection.
+/** Get the current word selection. */
 bool sai_get_word_selection(sai_t *obj);
 
-//! Releases & de-initialize the referenced peripherals.
+/** Releases & de-initialize the referenced peripherals. */
 void sai_free(sai_t *obj);
 
 /**@}*/
