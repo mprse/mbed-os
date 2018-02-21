@@ -106,6 +106,15 @@ typedef struct sai_init_s {
 /** Delegated typedef @see target/ ** /object.h */
 typedef struct sai_s sai_t;
 
+/** SAI configuration for I2S Philips 16 bit data & word size */
+extern const sai_format_t gsc_sai_mode_i2s16;
+/** SAI configuration for I2S Philips 32 bit data & word size */
+extern const sai_format_t gsc_sai_mode_i2s32;
+/** SAI configuration for PCM 16 bit data & word size with long sync */
+extern const sai_format_t gsc_sai_mode_pcm16l;
+/** SAI configuration for PCM 16 bit data & word size with short sync */
+extern const sai_format_t gcs_sai_mode_pcm16s;
+
 /** Initialize `obj` based on `init` values.
  * This function may fail if the underlying peripheral does not support the requested features.
  * @return `false` on failure.
