@@ -21,12 +21,10 @@
 #include "platform/mbed_toolchain.h"
 #include <string.h>
 
-const sai_format_t gcs_sai_mode_i2s16 = {
+const sai_format_t sai_mode_i2s16 = {
     .sample_rate = 44100,
     .bclk_polarity = true,
     .wclk_polarity = true,
-    .internal_bclk = true,
-    .internal_wclk = true,
     .ws_delay = true,
     .ws_length = 16,
     .frame_length = 1,
@@ -38,11 +36,9 @@ const sai_format_t gcs_sai_mode_i2s16 = {
     .bit_shift = 0
 };
 
-const sai_sub_init_t gcs_sai_mode_i2s32 = {
+const sai_format_t sai_mode_i2s32 = {
     .bclk_polarity = true,
     .wclk_polarity = true,
-    .internal_bclk = true,
-    .internal_wclk = true,
     .ws_delay = true,
     .ws_length = 32,
     .frame_length = 1,
@@ -54,11 +50,9 @@ const sai_sub_init_t gcs_sai_mode_i2s32 = {
     .bit_shift = 0
 };
 
-const sai_sub_init_t gcs_sai_mode_pcm16l = {
+const sai_format_t sai_mode_pcm16l = {
     .bclk_polarity = true,
     .wclk_polarity = true,
-    .internal_bclk = true,
-    .internal_wclk = true,
     .ws_delay = true,
     .ws_length = 13,
     .frame_length = 1,
@@ -70,12 +64,9 @@ const sai_sub_init_t gcs_sai_mode_pcm16l = {
     .bit_shift = 0
 };
 
-const sai_sub_init_t gcs_sai_mode_pcm16s = {
-    .is_slave = false,
+const sai_format_t sai_mode_pcm16s = {
     .bclk_polarity = true,
     .wclk_polarity = true,
-    .internal_bclk = true,
-    .internal_wclk = true,
     .ws_delay = true,
     .ws_length = 1,
     .frame_length = 1,
