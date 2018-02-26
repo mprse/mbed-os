@@ -60,22 +60,6 @@ typedef enum sai_synchronicity_e {
 } sai_synchronicity_t;
 
 /**
- *
- */
-typedef struct sai_channel_init_s {
-  bool          enable;
-
-  PinName       sd;
-  PinName       bclk;
-  PinName       wclk;
-  bool          is_slave; /**< true if it is slave */
-  bool          internal_bclk; /**< true to use internal bclock */
-  bool          internal_wclk; /**< true to use internal wclock */
-
-  sai_format_t  fmt;
-} sai_channel_init_t;
-
-/**
  * Used to define communication specs.
  */
 typedef struct sai_format_s {
@@ -95,10 +79,28 @@ typedef struct sai_format_s {
   uint8_t   bit_shift; /**< sample bit shift distance from its alignment point. */
 } sai_format_t;
 
+/**
+ *
+ */
+typedef struct sai_channel_init_s {
+  bool          enable;
+
+  PinName       sd;
+  PinName       bclk;
+  PinName       wclk;
+  bool          is_slave; /**< true if it is slave */
+  bool          internal_bclk; /**< true to use internal bclock */
+  bool          internal_wclk; /**< true to use internal wclock */
+
+  sai_format_t  format;
+} sai_channel_init_t;
+
 /** Init structure */
 typedef struct sai_init_s {
-  sai_synchronicity_e sync; // rx/tx independant(aka async), synced to rx, synced to tx
+  sai_synchronicity_t sync; // rx/tx independant(aka async), synced to rx, synced to tx
 
+  PinName       mclk;
+  uint32_t      mclk_freq;
   sai_channel_init_t TX;
   sai_channel_init_t RX;
 } sai_init_t;
@@ -107,13 +109,13 @@ typedef struct sai_init_s {
 typedef struct sai_s sai_t;
 
 /** SAI configuration for I2S Philips 16 bit data & word size */
-extern const sai_format_t gsc_sai_mode_i2s16;
+extern const sai_format_t sai_mode_i2s16;
 /** SAI configuration for I2S Philips 32 bit data & word size */
-extern const sai_format_t gsc_sai_mode_i2s32;
+extern const sai_format_t sai_mode_i2s32;
 /** SAI configuration for PCM 16 bit data & word size with long sync */
-extern const sai_format_t gsc_sai_mode_pcm16l;
+extern const sai_format_t sai_mode_pcm16l;
 /** SAI configuration for PCM 16 bit data & word size with short sync */
-extern const sai_format_t gcs_sai_mode_pcm16s;
+extern const sai_format_t sai_mode_pcm16s;
 
 /** Initialize `obj` based on `init` values.
  * This function may fail if the underlying peripheral does not support the requested features.
@@ -122,7 +124,7 @@ extern const sai_format_t gcs_sai_mode_pcm16s;
 bool sai_init(sai_t *obj, sai_init_t *init);
 
 /** Transfer a sample and return the sample received meanwhile. */
-uint32_t sai_xfer(sai_t *obj, uint32_t sample);
+uint32_t sai_xfer(sai_t *obj, uint32_t channel, uint32_t sample);
 
 /** Changes the format of the receiver channel only */
 bool sai_configure_receiver_format(sai_t *obj, sai_format_t *fmt);
@@ -131,7 +133,7 @@ bool sai_configure_receiver_format(sai_t *obj, sai_format_t *fmt);
 bool sai_configure_transmitter_format(sai_t *obj, sai_format_t *fmt);
 
 /** Changes the format of both transmitter & receiver */
-bool sai_configure_format(sai_t *obj, sai_format *fmt);
+bool sai_configure_format(sai_t *obj, sai_format_t *fmt);
 
 /** Get the current word selection. */
 bool sai_get_word_selection(sai_t *obj);
