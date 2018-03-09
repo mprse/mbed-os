@@ -422,6 +422,9 @@ void test_timer_time_accumulation_os_ticker()
     TEST_ASSERT_INT32_WITHIN(DELTA_US(1), 10000, p_timer->read_us());
     TEST_ASSERT_UINT64_WITHIN(DELTA_US(1), 10000, p_timer->read_high_resolution_us());
 
+    printf("--> delta: %f \n", DELTA_S(1));
+    printf("--> time: %f %f\n", 0.010f, p_timer->read());
+
     /* Wait 50 ms - this is done to show that time elapsed when
      * the timer is stopped does not have influence on the
      * timer counted time. */
@@ -444,6 +447,9 @@ void test_timer_time_accumulation_os_ticker()
     TEST_ASSERT_INT32_WITHIN(DELTA_US(2), 30000, p_timer->read_us());
     TEST_ASSERT_UINT64_WITHIN(DELTA_US(2), 30000, p_timer->read_high_resolution_us());
 
+    printf("--> delta: %f \n", DELTA_S(2));
+    printf("--> time: %f %f\n", 0.010f, p_timer->read());
+
     /* Wait 50 ms - this is done to show that time elapsed when
      * the timer is stopped does not have influence on the
      * timer counted time. */
@@ -464,6 +470,9 @@ void test_timer_time_accumulation_os_ticker()
     TEST_ASSERT_INT32_WITHIN(DELTA_MS(3), 60, p_timer->read_ms());
     TEST_ASSERT_INT32_WITHIN(DELTA_US(3), 60000, p_timer->read_us());
     TEST_ASSERT_UINT64_WITHIN(DELTA_US(3), 60000, p_timer->read_high_resolution_us());
+
+    printf("--> delta: %f \n", DELTA_S(3));
+    printf("--> time: %f %f\n", 0.010f, p_timer->read());
 
     /* Wait 50 ms - this is done to show that time elapsed when
      * the timer is stopped does not have influence on the
@@ -486,6 +495,9 @@ void test_timer_time_accumulation_os_ticker()
     TEST_ASSERT_INT32_WITHIN(DELTA_MS(4), 1060, p_timer->read_ms());
     TEST_ASSERT_INT32_WITHIN(DELTA_US(4), 1060000, p_timer->read_us());
     TEST_ASSERT_UINT64_WITHIN(DELTA_US(4), 1060000, p_timer->read_high_resolution_us());
+
+    printf("--> delta: %f \n", DELTA_S(4));
+    printf("--> time: %f %f\n", 0.010f, p_timer->read());
 }
 
 /* This test verifies if reset() function resets the timer
