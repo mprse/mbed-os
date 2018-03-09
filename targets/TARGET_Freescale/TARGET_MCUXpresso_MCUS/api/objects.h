@@ -95,6 +95,12 @@ struct flash_s {
     flash_config_t flash_config;
 };
 
+struct sai_s {
+    I2S_Type *base;
+    bool writable;
+    bool readable;
+};
+
 #include "gpio_object.h"
 
 #ifdef __cplusplus
