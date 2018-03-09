@@ -100,6 +100,7 @@ typedef struct sai_init_s {
   sai_synchronicity_t sync; // rx/tx independant(aka async), synced to rx, synced to tx
 
   PinName       mclk;
+  bool          mclk_internal_src;
   uint32_t      mclk_freq;
   sai_channel_init_t TX;
   sai_channel_init_t RX;
