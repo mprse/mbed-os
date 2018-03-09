@@ -176,35 +176,50 @@ void test_attach_time(void)
     When callback attached with time interval specified
     Then ticker properly executes callback within a specified time interval
  */
+
+extern uint32_t int_set;
+extern uint32_t curr_time;
+extern uint32_t cnt;
+
 template<us_timestamp_t DELAY_US>
 void test_attach_us_time(void)
 {
     LowPowerTicker ticker;
     ticker_callback_flag = 0;
 
-    gtimer.reset();
-    gtimer.start();
-    ticker.attach_us(callback(stop_gtimer_set_flag), DELAY_US);
-    while(!ticker_callback_flag);
-    ticker.detach();
-    const int time_diff = gtimer.read_us();
+    cnt = 0;
 
-    TEST_ASSERT_UINT64_WITHIN(TOLERANCE_US, DELAY_US, time_diff);
+    int delays[] = {1000, 5000, 10000, 20000, 30000, 40000, 50000, 60000, 70000, 80000, 90000, 100000, 500000, 1000000};
+    int times[(sizeof(delays)/sizeof(int))];
+    int now[(sizeof(delays)/sizeof(int))];
+    uint32_t int_set_buf[100];
+    uint32_t curr_time_buf[100];
+
+    for(int i = 0; i < (sizeof(delays)/sizeof(int)); i++) {
+        ticker_callback_flag = 0;
+        gtimer.reset();
+        gtimer.start();
+        cnt = 0;
+        now[i] = lp_ticker_read();
+        ticker.attach_us(callback(stop_gtimer_set_flag), delays[i]);
+        while(!ticker_callback_flag);
+        ticker.detach();
+        times[i] = gtimer.read_us();
+
+        int_set_buf[i] = int_set;
+        curr_time_buf[i] = curr_time;
+    }
+
+    for (int i = 0; i < (sizeof(times)/sizeof(int)); i++) {
+            printf("---> delay: %7d; times: %7d time_diff: %4d now: %7d curr_time: %7d int_set: %7d diff: %7d \n",
+                    delays[i], times[i], times[i] - delays[i], now[i], curr_time_buf[i], int_set_buf[i], int_set_buf[i] - curr_time_buf[i]);
+    }
+    //TEST_ASSERT_UINT64_WITHIN(TOLERANCE_US, DELAY_US, time_diff);
 }
 
 // Test cases
 Case cases[] = {
-    Case("Test attach for 0.001s and time measure", test_attach_time<1000>),
-    Case("Test attach_us for 1ms and time measure", test_attach_us_time<1000>),
-    Case("Test attach for 0.01s and time measure", test_attach_time<10000>),
-    Case("Test attach_us for 10ms and time measure", test_attach_us_time<10000>),
-    Case("Test attach for 0.1s and time measure", test_attach_time<100000>),
-    Case("Test attach_us for 100ms and time measure", test_attach_us_time<100000>),
-    Case("Test attach for 0.5s and time measure", test_attach_time<500000>),
-    Case("Test attach_us for 500ms and time measure", test_attach_us_time<500000>),
-    Case("Test detach", test_detach),
-    Case("Test multi call and time measure", test_multi_call_time),
-    Case("Test multi ticker", test_multi_ticker),
+    Case("Test attach_us for 10000ms and time measure", test_attach_us_time<1>),
 };
 
 utest::v1::status_t greentea_test_setup(const size_t number_of_cases)

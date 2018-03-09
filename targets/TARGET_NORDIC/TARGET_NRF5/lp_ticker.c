@@ -45,8 +45,17 @@ uint32_t lp_ticker_read()
     return nrf_rtc_counter_get(COMMON_RTC_INSTANCE);
 }
 
+volatile uint32_t int_set;
+volatile uint32_t curr_time;
+volatile uint32_t cnt = 0;
 void lp_ticker_set_interrupt(timestamp_t timestamp)
 {
+    if (cnt == 0) {
+        curr_time = nrf_rtc_counter_get(COMMON_RTC_INSTANCE);
+        int_set = timestamp;
+        cnt++;
+    }
+
     common_rtc_set_interrupt(timestamp,
         LP_TICKER_CC_CHANNEL, LP_TICKER_INT_MASK);
 }
