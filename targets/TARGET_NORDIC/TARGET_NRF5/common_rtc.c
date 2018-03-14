@@ -186,7 +186,26 @@ void common_rtc_set_interrupt(uint32_t ticks_count, uint32_t cc_channel,
 
     core_util_critical_section_enter();
 
-    nrf_rtc_cc_set(COMMON_RTC_INSTANCE, cc_channel, RTC_WRAP(ticks_count));
+    /* The COMPARE event occurs when the value in compare register is N and
+     * the counter value changes from N-1 to N. Therefore, the minimal safe
+     * difference between the compare value to be set and the current counter
+     * value is 2 ticks. This guarantees that the compare trigger is properly
+     * setup before the compare condition occurs. */
+
+    uint32_t now = nrf_rtc_counter_get(COMMON_RTC_INSTANCE);
+    uint32_t ex_ticks_count = ticks_count;
+
+    if (ticks_count < now) {
+        ex_ticks_count = 0xffffff + ticks_count + 1;
+    }
+
+    uint32_t safe_ticks_count = (now + 2);
+
+    if(ex_ticks_count < safe_ticks_count) {
+        ex_ticks_count = safe_ticks_count;
+    }
+
+    nrf_rtc_cc_set(COMMON_RTC_INSTANCE, cc_channel, RTC_WRAP(ex_ticks_count));
 
     if (!nrf_rtc_int_is_enabled(COMMON_RTC_INSTANCE, int_mask)) {
         nrf_rtc_event_clear(COMMON_RTC_INSTANCE, LP_TICKER_EVENT);
