@@ -50,61 +50,51 @@ extern "C" {
  * @{
  */
 
-/**
- * Used to define how transmitter & receiver are related.
- */
-typedef enum sai_synchronicity_e {
-    sai_synchronicity_async,
-    sai_synchronicity_synced_to_rx,
-    sai_synchronicity_synced_to_tx
-} sai_synchronicity_t;
-
-/**
- * Used to define communication specs.
- */
+/** Defines frame format. */
 typedef struct sai_format_s {
-  uint32_t  sample_rate; /**< Typically 44100Hz */
+  uint32_t      sample_rate;    /**< for example: 44100Hz */
 
-  bool      bclk_polarity; /**< true for Active high */
-  bool      wclk_polarity; /**< true for Active high */
-  bool      ws_delay; /**< true to toggle ws one bit earlier than the frame */
-  uint8_t   ws_length; /**< ws assertion length from 1bclk to word length. */
+  bool          bclk_polarity;  /**< true for Active high */
+  bool          wclk_polarity;  /**< true for Active high */
+  bool          ws_delay;       /**< true to toggle ws one bit earlier than the frame */
+  uint8_t       ws_length;      /**< ws assertion length from 1bclk to word length. */
 
-  uint8_t   frame_length; /**< Frame length in word count [1; 32] */
-  uint32_t  word_mask; /**< Mask on frame for used word (bitfield) */
-  uint8_t   word_length; /**< Word length in bits [1; 32] */
-  uint8_t   data_length; /**< Data length within the word. This must <= to word_length. */
-  bool      lsb_first; /**< true to send lsb first */
-  bool      aligned_left; /**< true to align Left */
-  uint8_t   bit_shift; /**< sample bit shift distance from its alignment point. */
+  uint8_t       frame_length;   /**< Frame length in word count [1; 32] */
+  uint32_t      word_mask;      /**< Mask on frame for used word (bitfield) */
+  uint8_t       word_length;    /**< Word length in bits [1; 32] */
+  uint8_t       data_length;    /**< Data length within the word. This must <= to word_length. */
+  bool          lsb_first;      /**< true to send lsb first */
+  bool          aligned_left;   /**< true to align Left */
+  uint8_t       bit_shift;      /**< sample bit shift distance from its alignment point. */
 } sai_format_t;
-
-/**
- *
- */
-typedef struct sai_channel_init_s {
-  bool          enable;
-
-  PinName       sd;
-  PinName       bclk;
-  PinName       wclk;
-  bool          is_slave; /**< true if it is slave */
-  bool          internal_bclk; /**< true to use internal bclock */
-  bool          internal_wclk; /**< true to use internal wclock */
-
-  sai_format_t  format;
-} sai_channel_init_t;
 
 /** Init structure */
 typedef struct sai_init_s {
-  sai_synchronicity_t sync; // rx/tx independant(aka async), synced to rx, synced to tx
+  bool          is_synced;      /**< When platform is capable of RX&TX simulaneously,
+                                     one's clocks can be tied to the other one.
+                                     true if this endpoint it following clock from its counterpart. */
+  bool          is_receiver;    /**< true if this is a receiver. */
+  bool          is_slave;       /**< true if clocks are inputs. */
 
-  PinName       mclk;
-  bool          mclk_internal_src;
-  uint32_t      mclk_freq;
-  sai_channel_init_t TX;
-  sai_channel_init_t RX;
+  PinName       mclk;           /**< master clock pin (opional, can be NC). */
+  PinName       sd;             /**< Data pin. */
+  PinName       bclk;           /**< Bit clock pin. */
+  PinName       wclk;           /**< Word clock pin. */
+
+  bool          mclk_internal_src; /**< Set true to use internal master clock source. */
+  uint32_t      mclk_freq;      /**< Set the master clock frequency. */
+
+  sai_format_t  format;         /**< Describes the frame format. */
 } sai_init_t;
+
+/** Initialization return status.*/
+typedef enum sai_result_e {
+    SAI_RESULT_OK,                  /**< Everything went well. */
+    SAI_RESULT_DEVICE_BUSY,         /**< All endpoint for the requested type are busy. */
+    SAI_RESULT_CONFIG_UNSUPPORTED,  /**< Some requested features are not supported by this platform. */
+    SAI_RESULT_CONFIG_MISMATCH,     /**< Some requested features mismatch with the required config
+                                         (depends on underlying device state) */
+} sai_result_t;
 
 /** Delegated typedef @see target/ ** /object.h */
 typedef struct sai_s sai_t;
@@ -119,25 +109,33 @@ extern const sai_format_t sai_mode_pcm16l;
 extern const sai_format_t sai_mode_pcm16s;
 
 /** Initialize `obj` based on `init` values.
- * This function may fail if the underlying peripheral does not support the requested features.
- * @return `false` on failure.
+ * @return initialization result.
  */
-bool sai_init(sai_t *obj, sai_init_t *init);
+sai_result_t sai_init(sai_t *obj, sai_init_t *init);
 
-/** Transfer a sample and return the sample received meanwhile. */
-uint32_t sai_xfer(sai_t *obj, uint32_t channel, uint32_t sample);
+/**
+ * Attempt to transmit a sample.
+ * @param   obj     This SAI instance.
+ * @param   sample  Sample to send.
+ * @return true if the sample was succesfully pushed to the bus (or the internal fifo).
+ */
+bool sai_write(sai_t *obj, uint32_t sample);
 
-/** Changes the format of the receiver channel only */
-bool sai_configure_receiver_format(sai_t *obj, sai_format_t *fmt);
+/**
+ * Receive a sample.
+ * @param obj       This SAI instance.
+ * @param sample    Pointer to store the received sample.
+ * @return false if no sample was received or if "sample" is NULL.
+ */
+bool sai_read(sai_t *obj, uint32_t *sample);
 
-/** Changes the format of the transmitter channel only */
-bool sai_configure_transmitter_format(sai_t *obj, sai_format_t *fmt);
-
-/** Changes the format of both transmitter & receiver */
-bool sai_configure_format(sai_t *obj, sai_format_t *fmt);
-
-/** Get the current word selection. */
-bool sai_get_word_selection(sai_t *obj);
+/**
+ * Attempt to transmit or receive a sample depending of the mode of this instance.
+ * @param obj       This SAI instance.
+ * @param sample    Pointer to store or fetch a sample.
+ * @return true if the/a sample was transmitted/received.
+ */
+bool sai_xfer(sai_t *obj, uint32_t *sample);
 
 /** Releases & de-initialize the referenced peripherals. */
 void sai_free(sai_t *obj);

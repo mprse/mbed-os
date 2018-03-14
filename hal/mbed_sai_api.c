@@ -78,17 +78,4 @@ const sai_format_t sai_mode_pcm16s = {
     .bit_shift = 0
 };
 
-
-MBED_WEAK bool sai_configure_receiver_format(sai_t *obj, sai_format_t *fmt) {
-    (void) obj;
-    (void) fmt;
-    return false;
-}
-
-MBED_WEAK bool sai_configure_transmitter_format(sai_t *obj, sai_format_t *fmt) {
-    (void) obj;
-    (void) fmt;
-    return false;
-}
-
 #endif
