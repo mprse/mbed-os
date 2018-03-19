@@ -20,25 +20,10 @@
 
 namespace mbed {
 
-SAI::SAI(const sai_format_t *fmt) : _sai(), _mutex() {
+SAI::SAI(sai_init_t *sai_init_data) : _sai(), _mutex() {
     // No lock needed in the constructor
-    sai_init_t init = {};
-    init.sync = sai_synchronicity_async;
-    init.mclk = SAI_MCLK;
-    init.mclk_internal_src = true;
-    init.mclk_freq = 120000000;
-    init.TX.enable = true;
-    init.TX.sd = SAI_TX_SD;
-    init.TX.bclk = SAI_TX_BCLK;
-    init.TX.wclk = SAI_TX_WCLK;
-    init.TX.format = *fmt;
-    init.TX.enable = true;
-    init.RX.sd = SAI_RX_SD;
-    init.RX.bclk = SAI_RX_BCLK;
-    init.RX.wclk = SAI_RX_WCLK;
-    init.RX.format = *fmt;
-
-    if (!sai_init(&_sai, &init)) {
+    if (!sai_init(&_sai, sai_init_data)) {
+        printf("SAI INIT ERROR !!!! \n\n\n");
         // log error
         // in true c++ we should throw an exception from here
         // but well... embedded c++

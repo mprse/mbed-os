@@ -37,7 +37,7 @@ public:
 
     /** Create a SAI
      */
-    SAI(const sai_format_t *fmt);
+    SAI(sai_init_t *sai_init);
 
     /** Push a sample to the Fifo & try to read a new sample.
      * it may return 0 if no sample was available.
