@@ -24,7 +24,8 @@
 
 #ifdef __cplusplus
 extern "C" {
-#endif
+#endif // __cplusplus
+
 /**
  * \defgroup hal_sai Serial audio interface hal functions
  * Low level interface to the serial audio interface of a target.
@@ -146,10 +147,10 @@ void sai_free(sai_t *obj);
 
 #ifdef __cplusplus
 }
-#endif
+#endif // __cplusplus
 
-#endif
+#endif // DEVICE_SAI
 
-#endif
+#endif // MBED_SAI_API_H
 
 /** @}*/
