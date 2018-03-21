@@ -91,4 +91,4 @@ const sai_format_t sai_mode_pcm16s = {
     .bit_shift = 0
 };
 
-#endif
+#endif // DEVICE_SAI
