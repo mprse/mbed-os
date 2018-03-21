@@ -22,14 +22,27 @@
 #include <string.h>
 
 const sai_format_t sai_mode_i2s16 = {
-    .sample_rate = 44100,
     .bclk_polarity = true,
     .wclk_polarity = true,
     .ws_delay = true,
     .ws_length = 16,
     .frame_length = 1,
-    .word_mask = 0x00000001,
+    .word_mask = 0,
     .word_length = 16,
+    .data_length = 16,
+    .lsb_first = false,
+    .aligned_left = true,
+    .bit_shift = 0
+};
+
+const sai_format_t sai_mode_i2s16w32 = {
+    .bclk_polarity = true,
+    .wclk_polarity = true,
+    .ws_delay = true,
+    .ws_length = 32,
+    .frame_length = 1,
+    .word_mask = 0,
+    .word_length = 32,
     .data_length = 16,
     .lsb_first = false,
     .aligned_left = true,
@@ -42,7 +55,7 @@ const sai_format_t sai_mode_i2s32 = {
     .ws_delay = true,
     .ws_length = 32,
     .frame_length = 1,
-    .word_mask = 0x00000001,
+    .word_mask = 0,
     .word_length = 32,
     .data_length = 32,
     .lsb_first = false,
@@ -56,7 +69,7 @@ const sai_format_t sai_mode_pcm16l = {
     .ws_delay = true,
     .ws_length = 13,
     .frame_length = 1,
-    .word_mask = 0x00000001,
+    .word_mask = 0,
     .word_length = 16,
     .data_length = 16,
     .lsb_first = false,
@@ -70,7 +83,7 @@ const sai_format_t sai_mode_pcm16s = {
     .ws_delay = true,
     .ws_length = 1,
     .frame_length = 1,
-    .word_mask = 0x00000001,
+    .word_mask = 0,
     .word_length = 16,
     .data_length = 16,
     .lsb_first = false,

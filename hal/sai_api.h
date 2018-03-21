@@ -52,8 +52,6 @@ extern "C" {
 
 /** Defines frame format. */
 typedef struct sai_format_s {
-  uint32_t      sample_rate;    /**< for example: 44100Hz */
-
   bool          bclk_polarity;  /**< true for Active high */
   bool          wclk_polarity;  /**< true for Active high */
   bool          ws_delay;       /**< true to toggle ws one bit earlier than the frame */
@@ -83,6 +81,8 @@ typedef struct sai_init_s {
 
   bool          mclk_internal_src; /**< Set true to use internal master clock source. */
   uint32_t      mclk_freq;      /**< Set the master clock frequency. */
+  uint32_t      sample_rate;    /**< for example: 44100Hz */
+  uint32_t      master_clock;   /**< MCLK frequency */
 
   sai_format_t  format;         /**< Describes the frame format. */
 } sai_init_t;
@@ -101,6 +101,8 @@ typedef struct sai_s sai_t;
 
 /** SAI configuration for I2S Philips 16 bit data & word size */
 extern const sai_format_t sai_mode_i2s16;
+/** SAI configuration for I2S Philips 16bit data & 32bit word size */
+extern const sai_format_t sai_mode_i2s16w32;
 /** SAI configuration for I2S Philips 32 bit data & word size */
 extern const sai_format_t sai_mode_i2s32;
 /** SAI configuration for PCM 16 bit data & word size with long sync */
