@@ -33,11 +33,6 @@ extern "C" {
  * # Defined behavior
  * * Supports a subset of the possible configuration space - verified by ::sai_
  * * Reports a failure (returns false) upon any invocation to an unsupported feature/parameter - verified by ::sai_
- * * Is able to indicate the currently processed word - verified by ::sai_
- * # Defined behavior if feature supported
- * * Is able to change receiver format without interrupting transmitter format - verified by ::sai_
- * * Is able to change transmitter format without interrupting receiver format - verified by ::sai_
- * * Is able to change transmitter and receiver format without interrupting the current frame - verified by ::sai_
  *
  * @note
  * A transceiver supporting async rx/tx should be considered as 2 different peripherals :
@@ -67,23 +62,25 @@ typedef struct sai_format_s {
   uint8_t       bit_shift;      /**< sample bit shift distance from its alignment point. */
 } sai_format_t;
 
+/** Defines input mclk source */
+typedef enum sai_clock_source_e {
+  SAI_CLOCK_SOURCE_Internal,
+  SAI_CLOCK_SOURCE_External,
+  SAI_CLOCK_SOURCE_Sibling
+} sai_clock_source_t;
+
 /** Init structure */
 typedef struct sai_init_s {
-  bool          is_synced;      /**< When platform is capable of RX&TX simulaneously,
-                                     one's clocks can be tied to the other one.
-                                     true if this endpoint it following clock from its counterpart. */
-  bool          is_receiver;    /**< true if this is a receiver. */
-  bool          is_slave;       /**< true if clocks are inputs. */
-
   PinName       mclk;           /**< master clock pin (opional, can be NC). */
   PinName       sd;             /**< Data pin. */
   PinName       bclk;           /**< Bit clock pin. */
   PinName       wclk;           /**< Word clock pin. */
 
-  bool          mclk_internal_src; /**< Set true to use internal master clock source. */
-  uint32_t      mclk_freq;      /**< Set the master clock frequency. */
+  sai_clock_source_t mclk_source; /**< mclk input to this peripheral */
+  uint32_t      input_mclk_frequency;
+  uint32_t      output_mclk_frequency;
   uint32_t      sample_rate;    /**< for example: 44100Hz */
-  uint32_t      master_clock;   /**< MCLK frequency */
+  bool          is_receiver;    /**< true if this is a receiver. */
 
   sai_format_t  format;         /**< Describes the frame format. */
 } sai_init_t;

@@ -40,9 +40,13 @@ sai_result_t sai_init(sai_t *obj, sai_init_t *init) {
     MBED_ASSERT(init != NULL);
     if (memcmp(&(init->format), &sai_mode_i2s16w32, sizeof(sai_format_t)) != 0) {
         // we only support 1 format so far
-        return false;
+        return SAI_RESULT_CONFIG_UNSUPPORTED;
     }
-    
+    if ((init->mclk_source != SAI_CLOCK_SOURCE_Internal) || (init->input_mclk_frequency != 0)) {
+        return SAI_RESULT_CONFIG_UNSUPPORTED;
+    }
+    uint32_t mclk_freq = CLOCK_GetFreq(kCLOCK_CoreSysClk);
+
     obj->is_receiver = init->is_receiver;
 
     // validate pins & fetch base peripheral address
@@ -66,11 +70,6 @@ sai_result_t sai_init(sai_t *obj, sai_init_t *init) {
     MBED_ASSERT(base != NC);
 
     obj->base = sai_addrs[base];
-
-    uint32_t mclk_freq = CLOCK_GetFreq(kCLOCK_CoreSysClk);
-    if (init->mclk_freq != 0) {
-        mclk_freq = init->mclk_freq;
-    }
 
     // enable recv
     sai_config_t config;
@@ -121,7 +120,7 @@ sai_result_t sai_init(sai_t *obj, sai_init_t *init) {
     format.bitWidth = init->format.data_length;
     format.channel = obj->channel;
     format.sampleRate_Hz = init->sample_rate;
-    format.masterClockHz = init->master_clock;
+    format.masterClockHz = init->output_mclk_frequency;
 
     format.protocol = config.protocol;
     format.stereo = kSAI_Stereo;
@@ -134,7 +133,7 @@ sai_result_t sai_init(sai_t *obj, sai_init_t *init) {
         SAI_TxSetFormat(obj->base, &format, mclk_freq, format.masterClockHz);
     }
 
-    return true;
+    return SAI_RESULT_OK;
 }
 
 /** Transfer a sample and return the sample received meanwhile. */
@@ -152,12 +151,12 @@ bool sai_xfer(sai_t *obj, uint32_t *sample) {
             }
             if ((flags & I2S_RCSR_FEF_MASK) == I2S_RCSR_FEF_MASK) {
                 SAI_RxClearStatusFlags(obj->base, I2S_RCSR_FEF_MASK);
-            }   
+            }
         }
     } else {
         uint32_t tmp_sample = 0;
         if (sample != NULL) { tmp_sample = *sample; }
-        
+
         uint32_t flags = SAI_TxGetStatusFlag(obj->base);
         if ((flags & I2S_TCSR_TE_MASK) == 0) {
             SAI_TxEnable(obj->base, true);

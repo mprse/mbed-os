@@ -23,8 +23,6 @@ namespace mbed {
 SAI::SAI(const sai_format_t *fmt, bool is_input, uint32_t master_clock, bool internal_mclk) : _sai(), _mutex(), _is_input(is_input) {
     // No lock needed in the constructor
     sai_init_t init = {};
-    init.is_receiver = is_input;
-    init.is_slave = false;
 
     init.mclk = SAI_MCLK;
     if (_is_input) {
@@ -37,10 +35,11 @@ SAI::SAI(const sai_format_t *fmt, bool is_input, uint32_t master_clock, bool int
         init.wclk = SAI_TX_WCLK;
     }
 
-    init.mclk_internal_src = internal_mclk;
-    init.mclk_freq = master_clock;  // 0 means guess it by yourself, else apply a clock div
+    init.is_receiver = is_input;
     init.sample_rate = 16000;
-    init.master_clock = 384 * init.sample_rate;
+    init.mclk_source = SAI_CLOCK_SOURCE_Internal;
+    init.input_mclk_frequency = 0; // 0 means find it by yourself.
+    init.output_mclk_frequency = 384 * init.sample_rate;
 
     init.format = *fmt;
 
