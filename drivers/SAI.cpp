@@ -24,12 +24,13 @@ SAI::SAI(const sai_format_t *fmt, bool is_input, uint32_t master_clock, bool int
     // No lock needed in the constructor
     sai_init_t init = {};
 
-    init.mclk = SAI_MCLK;
     if (_is_input) {
+        init.mclk = SAI_RX_MCLK;
         init.sd = SAI_RX_SD;
         init.bclk = SAI_RX_BCLK;
         init.wclk = SAI_RX_WCLK;
     } else {
+        init.mclk = SAI_TX_MCLK;
         init.sd = SAI_TX_SD;
         init.bclk = SAI_TX_BCLK;
         init.wclk = SAI_TX_WCLK;
@@ -43,10 +44,7 @@ SAI::SAI(const sai_format_t *fmt, bool is_input, uint32_t master_clock, bool int
 
     init.format = *fmt;
 
-    if (!sai_init(&_sai, &init)) {
-        // log error
-        // in true c++ we should throw an exception from here
-        // but well... embedded c++
+    if (sai_init(&_sai, &init) != SAI_RESULT_OK) {
     }
 }
 

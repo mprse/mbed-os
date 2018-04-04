@@ -217,10 +217,11 @@ typedef enum {
     USBRX = PTB16,
 
     // Audio bus
-    SAI_MCLK    = PTC6,
+    SAI_TX_MCLK = PTC6,
     SAI_TX_SD   = PTC1,
     SAI_TX_BCLK = PTE12,
     SAI_TX_WCLK = PTE11,
+    SAI_RX_MCLK = PTC6,
     SAI_RX_SD   = PTE7,
     SAI_RX_BCLK = PTE9,
     SAI_RX_WCLK = PTE8,
