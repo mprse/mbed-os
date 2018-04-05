@@ -136,7 +136,6 @@ sai_result_t sai_init(sai_t *obj, sai_init_t *init) {
     return SAI_RESULT_OK;
 }
 
-/** Transfer a sample and return the sample received meanwhile. */
 bool sai_xfer(sai_t *obj, uint32_t *sample) {
     bool ret = false;
     if (obj->is_receiver) {
@@ -179,5 +178,6 @@ void sai_free(sai_t *obj) {
     } else {
         SAI_TxEnable(obj->base, false);
     }
+    // Should it also unclock the periph ?
 }
 #endif

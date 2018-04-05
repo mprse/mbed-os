@@ -37,14 +37,18 @@ SAI::SAI(const sai_format_t *fmt, bool is_input, uint32_t master_clock, bool int
     }
 
     init.is_receiver = is_input;
-    init.sample_rate = 16000;
+    init.sample_rate = 8000;
     init.mclk_source = SAI_CLOCK_SOURCE_Internal;
     init.input_mclk_frequency = 0; // 0 means find it by yourself.
-    init.output_mclk_frequency = 384 * init.sample_rate;
+    init.output_mclk_frequency = 256 * init.sample_rate;
 
     init.format = *fmt;
 
     if (sai_init(&_sai, &init) != SAI_RESULT_OK) {
+        printf("woops\r\n");
+        // log error
+        // in true c++ we should throw an exception from here
+        // but well... embedded c++
     }
 }
 
