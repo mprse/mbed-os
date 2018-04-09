@@ -148,6 +148,7 @@ typedef struct sai_base_s sai_base_t;
 struct sai_s {
     const sai_base_t  *base;
     bool              is_receiver;
+    PinName           sd;
 };
 #endif
 

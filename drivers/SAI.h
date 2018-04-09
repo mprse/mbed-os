@@ -37,7 +37,8 @@ public:
 
     /** Create a SAI
      */
-    SAI(const sai_format_t *fmt = &sai_mode_i2s32, bool is_input = false,
+    SAI(PinName mclk, PinName bclk, PinName wclk, PinName sd,
+        const sai_format_t *fmt = &sai_mode_i2s32, bool is_input = false,
         uint32_t master_clock = 0, bool internal_mclk = false);
 
     /** Push a sample to the Fifo & try to read a new sample.
@@ -65,7 +66,9 @@ protected:
 
 class SAITransmitter : private SAI {
     public:
-        SAITransmitter(const sai_format_t *fmt = &sai_mode_i2s32) : SAI(fmt, false) { }
+        SAITransmitter(PinName mclk, PinName bclk, PinName wclk, PinName sd,
+                       const sai_format_t *fmt = &sai_mode_i2s32)
+           : SAI(mclk, bclk, wclk, sd, fmt, false) { }
 
         bool send(uint32_t sample) {
             return this->xfer(&sample);
@@ -74,7 +77,9 @@ class SAITransmitter : private SAI {
 
 class SAIReceiver : private SAI {
     public:
-        SAIReceiver(const sai_format_t *fmt = &sai_mode_i2s32) : SAI(fmt, true) { }
+        SAIReceiver(PinName mclk, PinName bclk, PinName wclk, PinName sd,
+                    const sai_format_t *fmt = &sai_mode_i2s32)
+            : SAI(mclk, bclk, wclk, sd, fmt, true) { }
 
         bool receive(uint32_t *sample) {
             return this->xfer(sample);

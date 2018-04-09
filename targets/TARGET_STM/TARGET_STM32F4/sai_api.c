@@ -63,6 +63,7 @@ sai_result_t sai_init(sai_t *obj, sai_init_t *init) {
     
     obj->base = &sai_bases[base];
     obj->is_receiver = init->is_receiver;
+    obj->sd = init->sd;
     return sai_vtable[obj->base->type]->init(obj, init);
 }
 

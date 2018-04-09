@@ -20,22 +20,16 @@
 
 namespace mbed {
 
-SAI::SAI(const sai_format_t *fmt, bool is_input, uint32_t master_clock, bool internal_mclk) : _sai(), _mutex(), _is_input(is_input) {
+SAI::SAI(PinName mclk, PinName bclk, PinName wclk, PinName sd,
+         const sai_format_t *fmt, bool is_input, uint32_t master_clock, bool internal_mclk
+) : _sai(), _mutex(), _is_input(is_input) {
     // No lock needed in the constructor
     sai_init_t init = {};
 
-    if (_is_input) {
-        init.mclk = SAI_RX_MCLK;
-        init.sd = SAI_RX_SD;
-        init.bclk = SAI_RX_BCLK;
-        init.wclk = SAI_RX_WCLK;
-    } else {
-        init.mclk = SAI_TX_MCLK;
-        init.sd = SAI_TX_SD;
-        init.bclk = SAI_TX_BCLK;
-        init.wclk = SAI_TX_WCLK;
-    }
-
+    init.mclk = mclk;
+    init.bclk = bclk;
+    init.wclk = wclk;
+    init.sd = sd;
     init.is_receiver = is_input;
     init.sample_rate = 8000;
     init.mclk_source = SAI_CLOCK_SOURCE_Internal;

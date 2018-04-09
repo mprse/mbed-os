@@ -35,10 +35,6 @@ typedef enum sai_periph_type_e {
     SAI_PERIPH_TYPE_I2S = 1
 } sai_periph_type_t;
 
-typedef struct sai_tuple_s {
-    SAI_TypeDef         *base;
-} sai_tuple_t;
-
 // this is a tagged union
 struct sai_base_s {
     sai_periph_type_t type;

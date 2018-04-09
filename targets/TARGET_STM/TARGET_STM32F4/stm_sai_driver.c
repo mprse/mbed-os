@@ -144,7 +144,6 @@ static sai_result_t stm_sai_init(sai_t *obj, sai_init_t *init) {
     uint32_t required_mclk = 256 * init->sample_rate;
         
     uint32_t mckdiv_hirez = (sai_clock_source*fix_factor) / required_mclk;
-    uint32_t no_divider = 0;
     uint32_t mckdiv = mckdiv_hirez >> fix_point;
 
     /* Round result to the nearest integer */
@@ -171,14 +170,14 @@ static sai_result_t stm_sai_init(sai_t *obj, sai_init_t *init) {
                 SAI_xCR1_LSBFIRST | SAI_xCR1_CKSTR      | SAI_xCR1_SYNCEN   |
                 SAI_xCR1_MONO     | SAI_xCR1_OUTDRIV    | SAI_xCR1_DMAEN    |
                 SAI_xCR1_NODIV    | SAI_xCR1_MCKDIV);
-    uint32_t mode = obj->is_receiver ? SAI_MODEMASTER_RX : SAI_MODEMASTER_TX;
+    uint32_t mode = obj->is_receiver ? 3 : 0; // slave_rx or master_tx
     
     uint32_t ds = ((data_size/8) << 1) + ((32-__CLZ(data_size%8)) != 0); // 31-clz(x) <=> ln(x)/ln(2)  
     tmpreg |= (uint32_t)(
-        mode                     | SAI_FREE_PROTOCOL             | (ds << SAI_xCR1_DS_Pos)  |
-        SAI_FIRSTBIT_MSB         | SAI_CLOCKSTROBING_RISINGEDGE  | SAI_ASYNCHRONOUS         |
-        SAI_STEREOMODE           | SAI_OUTPUTDRIVE_ENABLED       | 0 /* dma disabled */     | 
-        no_divider               | (uint32_t)((mckdiv/2) << 20)
+        (mode << SAI_xCR1_MODE_Pos) | (0 << SAI_xCR1_PRTCFG_Pos)    | (ds << SAI_xCR1_DS_Pos)   |
+        (0 << SAI_xCR1_LSBFIRST_Pos)| (1 << SAI_xCR1_CKSTR_Pos)     | (0 << SAI_xCR1_SYNCEN_Pos)|
+        (0 << SAI_xCR1_MONO_Pos)    | (0 << SAI_xCR1_OUTDRIV_Pos)   | (0 << SAI_xCR1_DMAEN_Pos) | 
+        (0 << SAI_xCR1_NODIV_Pos)   | (uint32_t)((mckdiv/2) << 20)
     );
     obj->base->u.sai_block->CR1 = tmpreg;
 
@@ -211,24 +210,22 @@ static sai_result_t stm_sai_init(sai_t *obj, sai_init_t *init) {
     /* FIFO flush */
     obj->base->u.sai_block->CR2 |= SAI_xCR2_FFLUSH;
     
-    /* enable */
-    obj->base->u.sai_block->CR1 |= SAI_xCR1_SAIEN;
-    
     return SAI_RESULT_OK;
 }
 
 static bool stm_sai_xfer(sai_t *obj, uint32_t *psample) {
     bool ret = false;
-    uint32_t sample = obj->base->u.sai_block->DR;
     uint32_t sr = obj->base->u.sai_block->SR;
-    if ((sr & SAI_xSR_OVRUDR) == SAI_xSR_OVRUDR) {
-        obj->base->u.sai_block->CR2 |= SAI_xCR2_FFLUSH;
-        obj->base->u.sai_block->CLRFR = SAI_xCLRFR_COVRUDR;
-    }
     uint32_t fifo_level = (sr & SAI_xSR_FLVL) >> SAI_xSR_FLVL_Pos;
+    
+    if ((obj->base->u.sai_block->CR1 & SAI_xCR1_SAIEN) != SAI_xCR1_SAIEN) {
+        obj->base->u.sai_block->CR1 |= SAI_xCR1_SAIEN;
+    }
+    
     if (obj->is_receiver) {
         ret = fifo_level != 0; // 0 = EMPTY
         if (ret) {
+            uint32_t sample = obj->base->u.sai_block->DR;
             if (psample != NULL) {
                 *psample = sample;
             }
