@@ -275,15 +275,14 @@ typedef enum {
     SPI_CS      = D10,
     PWM_OUT     = D9,
     
-    // SAI_1_A as output, I2S2 (I2S_A) as input
-    SAI_RX_MCLK = PC_6,
-    SAI_RX_SD   = PB_15,
-    SAI_RX_BCLK = PB_13, // open JP7
-    SAI_RX_WCLK = PB_12,
-    SAI_TX_MCLK = PE_2,
-    SAI_TX_SD   = PE_6,
-    SAI_TX_BCLK = PE_5,
-    SAI_TX_WCLK = PE_4,
+    SAI_A_MCLK  = PC_6,
+    SAI_A_SD    = PB_15,
+    SAI_A_BCLK  = PB_13, // open JP7
+    SAI_A_WCLK  = PB_12,
+    SAI_B_MCLK  = PE_2,
+    SAI_B_SD    = PE_6,
+    SAI_B_BCLK  = PE_5,
+    SAI_B_WCLK  = PE_4,
 
     //USB pins
     USB_OTG_HS_ULPI_D0 = PA_3,

@@ -31,7 +31,7 @@ SAI::SAI(PinName mclk, PinName bclk, PinName wclk, PinName sd,
     init.wclk = wclk;
     init.sd = sd;
     init.is_receiver = is_input;
-    init.sample_rate = 8000;
+    init.sample_rate = SAI_DEFAULT_SAMPLE_RATE;
     init.mclk_source = SAI_CLOCK_SOURCE_Internal;
     init.input_mclk_frequency = 0; // 0 means find it by yourself.
     init.output_mclk_frequency = 256 * init.sample_rate;

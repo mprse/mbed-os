@@ -30,7 +30,7 @@ extern "C" {
  * \defgroup hal_sai Serial audio interface hal functions
  * Low level interface to the serial audio interface of a target.
  *
- * # Defined behaviors
+ * # Defined behaviours
  * - `sai_init()` returns `SAI_RESULT_INVALID_PARAM`  if at least one of the given parameters is
  *   undefined (NULL) ;
  * - `sai_init()` returns `SAI_RESULT_ALREADY_INITIALIZED` if SAI is already initialized ;
@@ -55,6 +55,17 @@ extern "C" {
  * - `sai_xfer()` returns false if the fifo is full and `*psample` could not be pushed ;
  * - `sai_xfer()` if `psample` is NULL : it pushes one '0' sample to the FiFo and returns true ;
  * - `sai_xfer()` if `psample` is not NULL : it pushes the pointed sample to the FiFo and returns true.
+ *
+ * # Undefined behaviours
+ * - Calling any function other than `sai_init()` before the initialization of the SAI ;
+ * - Calling any function other than `sai_init()` after calling `sai_free()`.
+ *
+ * # other requirements
+ * A target must also define these elements to allow tests to be run.
+ * - `#define SAI_DEFAULT_SAMPLE_RATE (xxxxxU)` ;
+ * - Pins for 2 SAI/I²S interface including MCLK, BCLK, WCLK and SD named respectively
+ *   - SAI_A_MCLK, SAI_A_BCLK, SAI_A_WCLK and SAI_A_SD ;
+ *   - SAI_B_MCLK, SAI_B_BCLK, SAI_B_WCLK and SAI_B_SD.
  *
  * @note
  * A transceiver supporting async rx/tx should be considered as 2 different peripherals :
