@@ -186,6 +186,14 @@ void common_rtc_set_interrupt(uint32_t ticks_count, uint32_t cc_channel,
 
     core_util_critical_section_enter();
 
+    uint32_t now = nrf_rtc_counter_get(COMMON_RTC_INSTANCE);
+    uint32_t safe_ticks_count = now + 2;
+
+    if (RTC_WRAP(safe_ticks_count - 1) ==  ticks_count ||
+        RTC_WRAP(safe_ticks_count - 2) ==  ticks_count) {
+        ticks_count = RTC_WRAP(safe_ticks_count);
+    }
+
     nrf_rtc_cc_set(COMMON_RTC_INSTANCE, cc_channel, RTC_WRAP(ticks_count));
 
     if (!nrf_rtc_int_is_enabled(COMMON_RTC_INSTANCE, int_mask)) {
