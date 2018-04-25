@@ -1,5 +1,6 @@
 /** \addtogroup hal */
 /** @{*/
+
 /* mbed Microcontroller Library
  * Copyright (c) 2018 ARM Limited
  *
@@ -60,8 +61,48 @@ extern "C" {
  * The Hardware CRC HAL API provides a low-level interface to the Hardware CRC
  * module of a target platform.
  *
+ * # Defined behaviour
+ *
+ * * Function hal_crc_is_supported() returns true if platform supports hardware
+ *   CRC for the given polynomial - verified by test ::crc_is_supported_test.
+ * * Function hal_crc_is_supported() returns false if platform does not support hardware
+ *   CRC for the given polynomial - verified by test ::crc_is_supported_test.
+ * * Platform which supports hardware CRC must be able to handle at least one of the polynomials that can be
+ *   constructed in the MbedCRC class: POLY_8BIT_CCITT, POLY_7BIT_SD, POLY_16BIT_CCITT,
+ *   POLY_16BIT_IBM, POLY_32BIT_ANSI - verified by test ::crc_is_supported_test.
+ * * Function hal_crc_compute_partial_start() configures CRC module with the given polynomial
+ *   - Verified by test ::crc_calc_single_test.
+ * * Calling hal_crc_compute_partial_start() without finalising the
+ *   CRC calculation overrides the current configuration - Verified by test ::crc_reconfigure_test.
+ * * Function hal_crc_compute_partial() writes data to the current CRC module - verified by test ::crc_calc_single_test.
+ * * Function hal_crc_compute_partial() can be call multiple times in succession in order to
+ *   provide additional data to CRC module - verified by test ::crc_calc_multi_test.
+ * * Function hal_crc_compute_partial() does nothing if pointer to buffer is undefined or
+ *   data length is equal to 0 - verified by test ::crc_compute_partial_invalid_param_test.
+ * * Function hal_crc_get_result() returns the checksum result from the CRC module
+ *   - verified by tests ::crc_calc_single_test, ::crc_calc_multi_test, ::crc_reconfigure_test.
+ *
+ * # Undefined behaviour
+ *
+ * * Calling hal_crc_compute_partial_start() function with invalid (unsupported) polynomial.
+ * * Calling hal_crc_compute_partial() or hal_crc_get_result() functions before hal_crc_compute_partial_start().
+ * * Calling hal_crc_get_result() function multiple times.
+ *
+ * # Potential bugs
+ *
  * @{
  */
+
+/**
+ * \defgroup hal_hardware_crc_tests crc hal tests
+ * The crc HAL tests ensure driver conformance to defined behaviour.
+ *
+ * To run the crc hal tests use the command:
+ *
+ *     mbed test -t <toolchain> -m <target> -n tests-mbed_hal-crc*
+ *
+ */
+
 
 /** Determine if the current platform supports hardware CRC for given polynomial
  *
@@ -173,4 +214,5 @@ uint32_t hal_crc_get_result(void);
 #endif // DEVICE_CRC
 #endif // MBED_CRC_HAL_API_H
 
-/**@}*/
+/** @}*/
+
