@@ -23,6 +23,8 @@
 #include "RZ_A1_Init.h"
 #include "mbed_drv_cfg.h"
 
+#if DEVICE_SPI
+
 static const struct st_rspi *RSPI[] = RSPI_ADDRESS_LIST;
 
 static inline void spi_disable(spi_t *obj);
@@ -41,17 +43,17 @@ void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel
     uint32_t spi_data = pinmap_merge(spi_mosi, spi_miso);
     uint32_t spi_cntl = pinmap_merge(spi_sclk, spi_ssel);
     uint32_t spi      = pinmap_merge(spi_data, spi_cntl);
-    
+
     MBED_ASSERT((int)spi != NC);
-    
+
     obj->spi.spi = (struct st_rspi *)RSPI[spi];
     obj->spi.index = spi;
-    
+
     // enable power and clocking
     CPGSTBCR10 &= ~(0x80 >> spi);
     dummy = CPGSTBCR10;
     (void)dummy;
-    
+
     obj->spi.spi->SPCR   = 0x00;  // CTRL to 0
     obj->spi.spi->SPSCR  = 0x00;  // no sequential operation
     obj->spi.spi->SSLP   = 0x00;  // SSL 'L' active
@@ -62,7 +64,7 @@ void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel
     obj->spi.spi->SPPCR  = 0x20;  // MOSI Idle fixed value equals 0
     obj->spi.spi->SPBFCR = 0xf0;  // and set trigger count: read 1, write 1
     obj->spi.spi->SPBFCR = 0x30;  // and reset buffer
-    
+
     // pin out the spi pins
     pinmap_pinout(mosi, PinMap_SPI_MOSI);
     pinmap_pinout(miso, PinMap_SPI_MISO);
@@ -82,7 +84,7 @@ void spi_format(spi_t *obj, int bits, int mode, int slave) {
     uint16_t mask      = 0xf03;
     uint16_t wk_spcmd0;
     uint8_t  splw;
-    
+
     switch (mode) {
         case 0:
         case 1:
@@ -94,7 +96,7 @@ void spi_format(spi_t *obj, int bits, int mode, int slave) {
             error("SPI format error");
             return;
     }
-    
+
     switch (bits) {
         case 8:
             DSS  = 0x7;
@@ -116,7 +118,7 @@ void spi_format(spi_t *obj, int bits, int mode, int slave) {
     tmp |= (polarity << 1);
     tmp |= (DSS << 8);
     obj->spi.bits = bits;
-    
+
     spi_disable(obj);
     wk_spcmd0 = obj->spi.spi->SPCMD0;
     wk_spcmd0 &= ~mask;
@@ -139,21 +141,21 @@ void spi_frequency(spi_t *obj, int hz) {
     uint32_t  hz_min;
     uint16_t  mask = 0x000c;
     uint16_t  wk_spcmd0;
-    
+
     /* set PCLK */
     if (RZ_A1_IsClockMode0() == false) {
         pclk_base = CM1_RENESAS_RZ_A1_P1_CLK;
     } else {
         pclk_base = CM0_RENESAS_RZ_A1_P1_CLK;
     }
-    
+
     hz_min = pclk_base / 2 / 256 / 8;
     hz_max = pclk_base / 2;
     if (((uint32_t)hz < hz_min) || ((uint32_t)hz > hz_max)) {
         error("Couldn't setup requested SPI frequency");
         return;
     }
-    
+
     div = (pclk_base / hz / 2);
     while (div > 256) {
         div >>= 1;
@@ -161,7 +163,7 @@ void spi_frequency(spi_t *obj, int hz) {
     }
     div  -= 1;
     brdv  = (brdv << 2);
-    
+
     spi_disable(obj);
     obj->spi.spi->SPBR = div;
     wk_spcmd0 = obj->spi.spi->SPCMD0;
@@ -199,7 +201,7 @@ static inline void spi_write(spi_t *obj, int value) {
 
 static inline int spi_read(spi_t *obj) {
     int read_data;
-    
+
     if (obj->spi.bits == 8) {
         read_data = obj->spi.spi->SPDR.UINT8[0];
     } else if (obj->spi.bits == 16) {
@@ -207,7 +209,7 @@ static inline int spi_read(spi_t *obj) {
     } else {
         read_data = obj->spi.spi->SPDR.UINT32;
     }
-    
+
     return read_data;
 }
 
@@ -404,7 +406,7 @@ static void spi_async_write(spi_t *obj)
     uint8_t **width8;
     uint16_t **width16;
     uint32_t **width32;
-    
+
     if (obj->tx_buff.buffer) {
         switch (obj->tx_buff.width) {
             case 8:
@@ -413,21 +415,21 @@ static void spi_async_write(spi_t *obj)
                 ++*width8;
                 obj->tx_buff.pos += sizeof(uint8_t);
                 break;
-                
+
             case 16:
                 width16 = (uint16_t **)&obj->tx_buff.buffer;
                 spi_write(obj, **width16);
                 ++*width16;
                 obj->tx_buff.pos += sizeof(uint16_t);
                 break;
-                
+
             case 32:
                 width32 = (uint32_t **)&obj->tx_buff.buffer;
                 spi_write(obj, **width32);
                 ++*width32;
                 obj->tx_buff.pos += sizeof(uint32_t);
                 break;
-                
+
             default:
                 MBED_ASSERT(0);
                 break;
@@ -442,7 +444,7 @@ static void spi_async_read(spi_t *obj)
     uint8_t **width8;
     uint16_t **width16;
     uint32_t **width32;
-    
+
     switch (obj->rx_buff.width) {
         case 8:
             width8 = (uint8_t **)&obj->rx_buff.buffer;
@@ -450,21 +452,21 @@ static void spi_async_read(spi_t *obj)
             ++*width8;
             obj->rx_buff.pos += sizeof(uint8_t);
             break;
-            
+
         case 16:
             width16 = (uint16_t **)&obj->rx_buff.buffer;
             **width16 = spi_read(obj);
             ++*width16;
             obj->rx_buff.pos += sizeof(uint16_t);
             break;
-            
+
         case 32:
             width32 = (uint32_t **)&obj->rx_buff.buffer;
             **width32 = spi_read(obj);
             ++*width32;
             obj->rx_buff.pos += sizeof(uint32_t);
             break;
-            
+
         default:
             MBED_ASSERT(0);
             break;
@@ -484,7 +486,7 @@ void spi_master_transfer(spi_t *obj, const void *tx, size_t tx_length, void *rx,
     MBED_ASSERT(rx && ! tx ? rx_length : 1);
     MBED_ASSERT(obj->spi.spi->SPCR & (1 << 3)); /* Slave mode */
     MBED_ASSERT(bit_width == 8 || bit_width == 16 || bit_width == 32);
-    
+
     if (tx_length) {
         obj->tx_buff.buffer = (void *)tx;
     } else {
@@ -504,14 +506,14 @@ void spi_master_transfer(spi_t *obj, const void *tx, size_t tx_length, void *rx,
     for (i = 0; i < (int)obj->rx_buff.length; i++) {
         ((uint8_t *)obj->rx_buff.buffer)[i] = SPI_FILL_WORD;
     }
-    
+
     spi_data[obj->spi.index].async_callback = handler;
     spi_data[obj->spi.index].async_obj = obj;
     spi_data[obj->spi.index].event = 0;
     spi_data[obj->spi.index].wanted_events = event;
-    
+
     spi_irqs_set(obj, 1);
-    
+
     spi_async_write(obj);
 }
 
@@ -533,4 +535,5 @@ void spi_abort_asynch(spi_t *obj)
     spi_enable(obj);
 }
 
-#endif
+#endif /* DEVICE_SPI_ASYNCH */
+#endif /* DEVICE_SPI */

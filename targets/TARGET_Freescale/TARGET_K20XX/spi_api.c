@@ -16,6 +16,7 @@
 #include "mbed_assert.h"
 #include "spi_api.h"
 
+#if DEVICE_SPI
 #include <math.h>
 
 #include "cmsis.h"
@@ -31,7 +32,7 @@ void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel
     SPIName spi_ssel = (SPIName)pinmap_peripheral(ssel, PinMap_SPI_SSEL);
     SPIName spi_data = (SPIName)pinmap_merge(spi_mosi, spi_miso);
     SPIName spi_cntl = (SPIName)pinmap_merge(spi_sclk, spi_ssel);
-    
+
     obj->spi = (SPI_Type*)pinmap_merge(spi_data, spi_cntl);
     MBED_ASSERT((int)obj->spi != NC);
 
@@ -74,7 +75,7 @@ void spi_format(spi_t *obj, int bits, int mode, int slave) {
     // CTAR0 is used
     obj->spi->CTAR[0] &= ~(SPI_CTAR_CPHA_MASK | SPI_CTAR_CPOL_MASK | SPI_CTAR_FMSZ_MASK);
     obj->spi->CTAR[0] |= (polarity << SPI_CTAR_CPOL_SHIFT) | (phase << SPI_CTAR_CPHA_SHIFT) | ((bits - 1) << SPI_CTAR_FMSZ_SHIFT);
-    
+
     //If clk idle state was changed, start a dummy transmission
     //This is a 'feature' in DSPI: https://community.freescale.com/thread/105526
     if ((old_polarity != polarity) && (slave == 0)) {
@@ -167,3 +168,4 @@ int spi_slave_read(spi_t *obj) {
 void spi_slave_write(spi_t *obj, int value) {
     while (!spi_writeable(obj));
 }
+#endif /* DEVICE_SPI */

@@ -24,6 +24,7 @@
 #include "pdc.h"
 
 
+#if DEVICE_SPI
 /* Chip select. */
 #define SPI_CHIP_SEL 0
 
@@ -459,12 +460,12 @@ uint32_t spi_irq_handler_asynch(spi_t *obj)
         if(obj->spi.event | SPI_EVENT_COMPLETE)
             event |=SPI_EVENT_COMPLETE;
     }
-	
+
     if((obj->spi.spi_base->SPI_SR & SPI_IER_RXBUFF)) {
 	    spi_disable_interrupt(obj->spi.spi_base, SPI_IDR_RXBUFF | SPI_IDR_MODF | SPI_IDR_OVRES);
 	    if(obj->spi.event | SPI_EVENT_COMPLETE)
 	    event |=SPI_EVENT_COMPLETE;
-    }	
+    }
 
     if(obj->spi.spi_base->SPI_SR & SPI_SR_MODF) {
         if(obj->spi.event | SPI_EVENT_ERROR)
@@ -518,4 +519,5 @@ void spi_abort_asynch(spi_t *obj)
     NVIC_DisableIRQ(obj->spi.irq_type);
 }
 
-#endif
+#endif /* DEVICE_SPI_ASYNCH */
+#endif /* DEVICE_SPI */

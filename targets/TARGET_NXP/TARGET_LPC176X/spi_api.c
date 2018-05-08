@@ -21,6 +21,8 @@
 #include "pinmap.h"
 #include "mbed_error.h"
 
+#if DEVICE_SPI
+
 static const PinMap PinMap_SPI_SCLK[] = {
     {P0_7 , SPI_1, 2},
     {P0_15, SPI_0, 2},
@@ -66,7 +68,7 @@ void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel
     SPIName spi_cntl = (SPIName)pinmap_merge(spi_sclk, spi_ssel);
     obj->spi = (LPC_SSP_TypeDef*)pinmap_merge(spi_data, spi_cntl);
     MBED_ASSERT((int)obj->spi != NC);
-    
+
     // enable power and clocking
     switch ((int)obj->spi) {
         case SPI_0: LPC_SC->PCONP |= 1 << 21; break;
@@ -87,15 +89,15 @@ void spi_free(spi_t *obj) {}
 void spi_format(spi_t *obj, int bits, int mode, int slave) {
     ssp_disable(obj);
     MBED_ASSERT(((bits >= 4) && (bits <= 16)) && (mode >= 0 && mode <= 3));
-    
+
     int polarity = (mode & 0x2) ? 1 : 0;
     int phase = (mode & 0x1) ? 1 : 0;
-    
+
     // set it up
     int DSS = bits - 1;            // DSS (data select size)
     int SPO = (polarity) ? 1 : 0;  // SPO - clock out polarity
     int SPH = (phase) ? 1 : 0;     // SPH - clock out phase
-    
+
     int FRF = 0;                   // FRF (frame format) = SPI
     uint32_t tmp = obj->spi->CR0;
     tmp &= ~(0x00FF);              // Clear DSS, FRF, CPOL and CPHA [7:0]
@@ -104,20 +106,20 @@ void spi_format(spi_t *obj, int bits, int mode, int slave) {
         | SPO << 6
         | SPH << 7;
     obj->spi->CR0 = tmp;
-    
+
     tmp = obj->spi->CR1;
     tmp &= ~(0xD);
     tmp |= 0 << 0                   // LBM - loop back mode - off
         | ((slave) ? 1 : 0) << 2   // MS - master slave mode, 1 = slave
         | 0 << 3;                  // SOD - slave output disable - na
     obj->spi->CR1 = tmp;
-    
+
     ssp_enable(obj);
 }
 
 void spi_frequency(spi_t *obj, int hz) {
     ssp_disable(obj);
-    
+
     // setup the spi clock diveder to /1
     switch ((int)obj->spi) {
         case SPI_0:
@@ -129,22 +131,22 @@ void spi_frequency(spi_t *obj, int hz) {
             LPC_SC->PCLKSEL0 |=  (1 << 20);
             break;
     }
-    
+
     uint32_t PCLK = SystemCoreClock;
-    
+
     int prescaler;
-    
+
     for (prescaler = 2; prescaler <= 254; prescaler += 2) {
         int prescale_hz = PCLK / prescaler;
-        
+
         // calculate the divider
         int divider = floor(((float)prescale_hz / (float)hz) + 0.5f);
-        
+
         // check we can support the divider
         if (divider < 256) {
             // prescaler
             obj->spi->CPSR = prescaler;
-            
+
             // divider
             obj->spi->CR0 &= ~(0xFF00);  // Clear SCR: Serial clock rate [15:8]
             obj->spi->CR0 |= (divider - 1) << 8;
@@ -221,3 +223,5 @@ void spi_slave_write(spi_t *obj, int value) {
 int spi_busy(spi_t *obj) {
     return ssp_busy(obj);
 }
+
+#endif /* DEVICE_SPI */

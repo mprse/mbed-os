@@ -15,6 +15,7 @@
  */
 #include <math.h>
 
+#if DEVICE_SPI
 #include "spi_api.h"
 #include "spi_def.h"
 #include "cmsis.h"
@@ -62,7 +63,7 @@ static inline int ssp_disable(spi_t *obj);
 static inline int ssp_enable(spi_t *obj);
 
 void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel) {
-    
+
         int altfunction[4];
         // determine the SPI to use
     SPIName spi_mosi = (SPIName)pinmap_peripheral(mosi, PinMap_SPI_MOSI);
@@ -75,17 +76,17 @@ void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel
     if ((int)obj->spi == NC) {
         error("SPI pinout mapping failed");
     }
-    
+
     // enable power and clocking
     switch ((int)obj->spi) {
-      case (int)SPI_0: 
+      case (int)SPI_0:
             obj->spi->CR1       = 0;
             obj->spi->CR0       = SSP_CR0_SCR_DFLT | SSP_CR0_FRF_MOT | SSP_CR0_DSS_8;
-            obj->spi->CPSR      = SSP_CPSR_DFLT; 
-            obj->spi->IMSC      = 0x8; 
+            obj->spi->CPSR      = SSP_CPSR_DFLT;
+            obj->spi->IMSC      = 0x8;
             obj->spi->DMACR     = 0;
             obj->spi->CR1       = SSP_CR1_SSE_Msk;
-            obj->spi->ICR       = 0x3;  
+            obj->spi->ICR       = 0x3;
             break;
       case (int)SPI_1:
                       /* Configure SSP used for LCD                                               */
@@ -103,40 +104,40 @@ void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel
             obj->spi->CR1   = ((1ul <<  1) |       /* Synchronous serial port enable   */
                                 (0ul <<  2) );      /* Device configured as master      */
             break;
-      case (int)SPI_2: 
+      case (int)SPI_2:
             obj->spi->CR1       = 0;
             obj->spi->CR0       = SSP_CR0_SCR_DFLT | SSP_CR0_FRF_MOT | SSP_CR0_DSS_8;
-            obj->spi->CPSR      = SSP_CPSR_DFLT; 
-            obj->spi->IMSC      = 0x8; 
+            obj->spi->CPSR      = SSP_CPSR_DFLT;
+            obj->spi->IMSC      = 0x8;
             obj->spi->DMACR     = 0;
             obj->spi->CR1       = SSP_CR1_SSE_Msk;
-            obj->spi->ICR       = 0x3;  
+            obj->spi->ICR       = 0x3;
             break;
-      case (int)SPI_3: 
+      case (int)SPI_3:
             obj->spi->CR1       = 0;
             obj->spi->CR0       = SSP_CR0_SCR_DFLT | SSP_CR0_FRF_MOT | SSP_CR0_DSS_8;
-            obj->spi->CPSR      = SSP_CPSR_DFLT; 
-            obj->spi->IMSC      = 0x8; 
+            obj->spi->CPSR      = SSP_CPSR_DFLT;
+            obj->spi->IMSC      = 0x8;
             obj->spi->DMACR     = 0;
             obj->spi->CR1       = SSP_CR1_SSE_Msk;
-            obj->spi->ICR       = 0x3;  
+            obj->spi->ICR       = 0x3;
             break;
-      case (int)SPI_4: 
+      case (int)SPI_4:
             obj->spi->CR1       = 0;
             obj->spi->CR0       = SSP_CR0_SCR_DFLT | SSP_CR0_FRF_MOT | SSP_CR0_DSS_8;
-            obj->spi->CPSR      = SSP_CPSR_DFLT; 
-            obj->spi->IMSC      = 0x8; 
+            obj->spi->CPSR      = SSP_CPSR_DFLT;
+            obj->spi->IMSC      = 0x8;
             obj->spi->DMACR     = 0;
             obj->spi->CR1       = SSP_CR1_SSE_Msk;
-            obj->spi->ICR       = 0x3;  
+            obj->spi->ICR       = 0x3;
             break;
     }
-    
+
         if(mosi != NC){ altfunction[0] = 1;}else{ altfunction[0] = 0;}
         if(miso != NC){ altfunction[1] = 1;}else{ altfunction[1] = 0;}
         if(sclk != NC){ altfunction[2] = 1;}else{ altfunction[2] = 0;}
         if(ssel != NC){ altfunction[3] = 1;}else{ altfunction[3] = 0;}
-        
+
     // enable alt function
     switch ((int)obj->spi) {
       case (int)SPI_2:
@@ -149,7 +150,7 @@ void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel
                 CMSDK_GPIO4->ALTFUNCSET |= (altfunction[2]<<3 | altfunction[1]<<2 | altfunction[0]<<1 | altfunction[3]);
             break;
         }
-        
+
     // set default format and frequency
     if (ssel == NC) {
         spi_format(obj, 8, 0, 0);  // 8 bits, mode 0, master
@@ -157,7 +158,7 @@ void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel
         spi_format(obj, 8, 0, 1);  // 8 bits, mode 0, slave
     }
     spi_frequency(obj, 1000000);
-    
+
     // enable the ssp channel
     ssp_enable(obj);
 
@@ -177,15 +178,15 @@ void spi_format(spi_t *obj, int bits, int mode, int slave) {
     if (!(bits >= 4 && bits <= 16) || !(mode >= 0 && mode <= 3)) {
         error("SPI format error");
     }
-    
+
     int polarity = (mode & 0x2) ? 1 : 0;
     int phase = (mode & 0x1) ? 1 : 0;
-    
+
     // set it up
     int DSS = bits - 1;            // DSS (data select size)
     int SPO = (polarity) ? 1 : 0;  // SPO - clock out polarity
     int SPH = (phase) ? 1 : 0;     // SPH - clock out phase
-    
+
     int FRF = 0;                   // FRF (frame format) = SPI
     uint32_t tmp = obj->spi->CR0;
     tmp &= ~(0xFFFF);
@@ -194,35 +195,35 @@ void spi_format(spi_t *obj, int bits, int mode, int slave) {
         | SPO << 6
         | SPH << 7;
     obj->spi->CR0 = tmp;
-    
+
     tmp = obj->spi->CR1;
     tmp &= ~(0xD);
     tmp |= 0 << 0                   // LBM - loop back mode - off
         | ((slave) ? 1 : 0) << 2   // MS - master slave mode, 1 = slave
         | 0 << 3;                  // SOD - slave output disable - na
     obj->spi->CR1 = tmp;
-    
+
     ssp_enable(obj);
 }
 
 void spi_frequency(spi_t *obj, int hz) {
     ssp_disable(obj);
-   
+
     uint32_t PCLK = SystemCoreClock;
-    
+
         int prescaler;
-    
+
     for (prescaler = 2; prescaler <= 254; prescaler += 2) {
         int prescale_hz = PCLK / prescaler;
-        
+
         // calculate the divider
         int divider = floor(((float)prescale_hz / (float)hz) + 0.5f);
-        
+
         // check we can support the divider
         if (divider < 256) {
             // prescaler
             obj->spi->CPSR = prescaler;
-            
+
             // divider
             obj->spi->CR0 &= ~(0xFFFF << 8);
             obj->spi->CR0 |= (divider - 1) << 8;
@@ -299,3 +300,4 @@ void spi_slave_write(spi_t *obj, int value) {
 int spi_busy(spi_t *obj) {
     return ssp_busy(obj);
 }
+#endif /* DEVICE_SPI */

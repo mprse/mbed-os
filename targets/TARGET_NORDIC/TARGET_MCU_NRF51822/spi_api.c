@@ -20,6 +20,7 @@
 #include "pinmap.h"
 #include "mbed_error.h"
 
+#if DEVICE_SPI
 #define SPIS_MESSAGE_SIZE 1
 volatile uint8_t m_tx_buf[SPIS_MESSAGE_SIZE] = {0};
 volatile uint8_t m_rx_buf[SPIS_MESSAGE_SIZE] = {0};
@@ -33,7 +34,7 @@ extern volatile i2c_spi_peripheral_t i2c1_spi1_peripheral;
 void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel)
 {
     SPIName spi = SPI_0;
-    
+
     if (ssel == NC && i2c0_spi0_peripheral.usage == I2C_SPI_PERIPHERAL_FOR_SPI &&
             i2c0_spi0_peripheral.sda_mosi == (uint8_t)mosi &&
             i2c0_spi0_peripheral.scl_miso == (uint8_t)miso &&
@@ -53,7 +54,7 @@ void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel
         i2c1_spi1_peripheral.sda_mosi = (uint8_t)mosi;
         i2c1_spi1_peripheral.scl_miso = (uint8_t)miso;
         i2c1_spi1_peripheral.sclk     = (uint8_t)sclk;
-        
+
         spi = SPI_1;
         obj->peripheral = 0x2;
     } else if (i2c0_spi0_peripheral.usage == 0) {
@@ -61,7 +62,7 @@ void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel
         i2c0_spi0_peripheral.sda_mosi = (uint8_t)mosi;
         i2c0_spi0_peripheral.scl_miso = (uint8_t)miso;
         i2c0_spi0_peripheral.sclk     = (uint8_t)sclk;
-        
+
         spi = SPI_0;
         obj->peripheral = 0x1;
     } else {
@@ -299,3 +300,4 @@ void spi_slave_write(spi_t *obj, int value)
     obj->spis->EVENTS_ACQUIRED = 0;
     obj->spis->EVENTS_END      = 0;
 }
+#endif /* DEVICE_SPI */

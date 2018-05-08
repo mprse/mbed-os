@@ -20,7 +20,7 @@
 #include "mbed_wait_api.h"
 #include "platform_devices.h"
 
-
+#if DEVICE_SPI
 static const PinMap PinMap_SPI_SCLK[] = {
     {SPI_SCLK,         SPI_0, 0},
     {CLCD_SCLK,        SPI_1, 0},
@@ -263,3 +263,4 @@ int spi_busy(spi_t *obj)
     int32_t status = spi_pl022_get_status(obj->spi);
     return (status & SPI_PL022_SSPSR_BSY_MSK);
 }
+#endif /* DEVICE_SPI */

@@ -1,4 +1,4 @@
-/* mbed Microcontroller Library 
+/* mbed Microcontroller Library
  *******************************************************************************
  * Copyright (c) 2015 WIZnet Co.,Ltd. All rights reserved.
  * All rights reserved.
@@ -27,7 +27,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *******************************************************************************
  */
- 
+
 #include "mbed_assert.h"
 #include <math.h>
 
@@ -36,6 +36,8 @@
 #include "pinmap.h"
 #include "mbed_error.h"
 #include "PeripheralPins.h"
+
+#if DEVICE_SPI
 
 static inline int ssp_disable(spi_t *obj);
 static inline int ssp_enable(spi_t *obj);
@@ -50,13 +52,13 @@ void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel
     SPIName spi_cntl = (SPIName)pinmap_merge(spi_sclk, spi_ssel);
     obj->spi = (SSP_TypeDef*)pinmap_merge(spi_data, spi_cntl);
     MBED_ASSERT((int)obj->spi != NC);
-    
+
     // enable power and clocking
     switch ((int)obj->spi) {
         case SPI_0: CRG->SSPCLK_SSR   = CRG_SSPCLK_SSR_MCLK; break; //PLL output clock
         case SPI_1: CRG->SSPCLK_SSR   = CRG_SSPCLK_SSR_MCLK; break;
     }
-    
+
     // set default format and frequency
     if (ssel == NC) {
         spi_format(obj, 8, 0, 0);  // 8 bits, mode 0, master
@@ -64,7 +66,7 @@ void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel
         spi_format(obj, 8, 0, 1);  // 8 bits, mode 0, slave
     }
     spi_frequency(obj, 1000000);
-    
+
     // enable the ssp channel
     ssp_enable(obj);
 
@@ -82,15 +84,15 @@ void spi_free(spi_t *obj) {}
 void spi_format(spi_t *obj, int bits, int mode, int slave) {
     ssp_disable(obj);
     MBED_ASSERT(((bits >= 4) && (bits <= 16)) && (mode >= 0 && mode <= 3));
-    
+
     int polarity = (mode & 0x2) ? 1 : 0;
     int phase = (mode & 0x1) ? 1 : 0;
-    
+
     // set it up
     int DSS = bits - 1;            // DSS (data select size)
     int SPO = (polarity) ? 1 : 0;  // SPO - clock out polarity
     int SPH = (phase) ? 1 : 0;     // SPH - clock out phase
-    
+
     int FRF = 0;                   // FRF (frame format) = SPI
     uint32_t tmp = obj->spi->CR0;
     tmp &= ~(0xFFFF);
@@ -99,45 +101,45 @@ void spi_format(spi_t *obj, int bits, int mode, int slave) {
         | SPO << 6
         | SPH << 7;
     obj->spi->CR0 = tmp;
-    
+
     tmp = obj->spi->CR1;
     tmp &= ~(0xD);
     tmp |= 0 << 0                   // LBM - loop back mode - off
         | ((slave) ? 1 : 0) << 2   // MS - master slave mode, 1 = slave
         | 0 << 3;                  // SOD - slave output disable - na
     obj->spi->CR1 = tmp;
-    
+
     ssp_enable(obj);
 }
 
 void spi_frequency(spi_t *obj, int hz) {
     ssp_disable(obj);
-    
+
     // setup the spi clock diveder to /1
     switch ((int)obj->spi) {
         case SPI_0:
-            CRG->SSPCLK_PVSR  = CRG_SSPCLK_PVSR_DIV1; //1/1 (bypass) 
+            CRG->SSPCLK_PVSR  = CRG_SSPCLK_PVSR_DIV1; //1/1 (bypass)
             break;
         case SPI_1:
             CRG->SSPCLK_PVSR  = CRG_SSPCLK_PVSR_DIV1; //1/1 (bypass)
             break;
     }
-    
-    uint32_t HCLK = SystemCoreClock; 
-    
+
+    uint32_t HCLK = SystemCoreClock;
+
     int prescaler;
-    
+
     for (prescaler = 2; prescaler <= 254; prescaler += 2) {
         int prescale_hz = HCLK / prescaler;
-        
+
         // calculate the divider
         int divider = floor(((float)prescale_hz / (float)hz) + 0.5f);
-        
+
         // check we can support the divider
         if (divider < 256) {
             // prescaler
             obj->spi->CPSR = prescaler;
-            
+
             // divider
             obj->spi->CR0 &= ~(0xFFFF << 8);
             obj->spi->CR0 |= (divider - 1) << 8;
@@ -214,4 +216,4 @@ void spi_slave_write(spi_t *obj, int value) {
 int spi_busy(spi_t *obj) {
     return ssp_busy(obj);
 }
-
+#endif /* DEVICE_SPI */
