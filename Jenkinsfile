@@ -24,7 +24,7 @@ def parallelSteps = mbed.createParalleSteps("mbed-os", targets, toolchains)
 mbed.compile(parallelSteps)
 
 def testApps = [
-  "mbed-os-cliapp"
+//  "mbed-os-cliapp" // disable cliapp as it heavily relies on SPI for a lot of targets
   ]
 
 // buildTestApps accepts array of test application names and a mbed-os branch or PR reference as parameters
