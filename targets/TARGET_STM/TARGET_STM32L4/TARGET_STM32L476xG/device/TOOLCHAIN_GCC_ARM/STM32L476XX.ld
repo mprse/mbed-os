@@ -159,7 +159,7 @@ SECTIONS
      * size of stack_dummy section */
     __StackTop = ORIGIN(SRAM2) + LENGTH(SRAM2);
     _estack = __StackTop;
-    __StackLimit = __StackTop - SIZEOF(.stack_dummy);
+    __StackLimit = __StackTop - 1024;
     PROVIDE(__stack = __StackTop);
     /* Check if stack exceeds RAM2 limit */
     ASSERT((ORIGIN(SRAM2)+LENGTH(SRAM2)) >= __StackLimit, "SRAM2 overflow")
