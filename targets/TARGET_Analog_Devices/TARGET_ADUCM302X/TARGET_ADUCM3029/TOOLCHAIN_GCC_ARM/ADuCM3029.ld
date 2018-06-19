@@ -33,7 +33,7 @@ MEMORY
 /* Library configurations */
 GROUP(libgcc.a libc.a libm.a libnosys.a)
 /* Custom stack and heap sizes */
-__stack_size__ = 0x1000;
+__stack_size__ = 0x400;
 __heap_size__ = 0x2000;
 
 /* select custom or default sizes for stack and heap */

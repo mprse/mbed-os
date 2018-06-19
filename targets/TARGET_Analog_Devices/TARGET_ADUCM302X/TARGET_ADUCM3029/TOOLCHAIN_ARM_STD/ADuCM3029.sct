@@ -67,7 +67,7 @@ LR_IROM1 MBED_APP_START MBED_APP_SIZE {
         (0x20003000 - AlignExpr(ImageLimit(RW_IRAM1), 16)) { ; heap
     }
 
-    ADUCM_STACK AlignExpr(+0, 16) EMPTY 0x1000 { ; stack
+    ADUCM_STACK AlignExpr(+0, 16) EMPTY 0x400 { ; stack
     }
 
     ADUCM_IRAM2 0x20004000 0x4000 { ; bss section
