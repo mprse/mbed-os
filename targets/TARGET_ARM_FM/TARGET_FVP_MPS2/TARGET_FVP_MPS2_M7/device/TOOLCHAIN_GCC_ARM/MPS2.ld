@@ -63,7 +63,7 @@ MEMORY
 ENTRY(Reset_Handler)
 
 HEAP_SIZE  = 0x4000;
-STACK_SIZE = 0x1000;
+STACK_SIZE = 0x400;
 
 /* Size of the vector table in SRAM */
 M_VECTOR_RAM_SIZE = 0x140;
