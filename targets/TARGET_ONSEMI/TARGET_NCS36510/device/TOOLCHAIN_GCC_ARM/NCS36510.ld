@@ -235,7 +235,7 @@ MEMORY {
 
     /* Set stack top to end of RAM */
     __StackTop = ORIGIN(RAM) + LENGTH(RAM);
-    __StackLimit = __StackTop - SIZEOF(.stack);
+    __StackLimit = __StackTop - 1024;
     PROVIDE(__stack = __StackTop);
 
 }
