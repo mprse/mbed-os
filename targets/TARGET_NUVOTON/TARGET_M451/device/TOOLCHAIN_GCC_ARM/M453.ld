@@ -10,7 +10,7 @@
   #define MBED_APP_SIZE 0x00040000
 #endif 
 
-StackSize = 0x800;
+StackSize = 0x400;
 
 MEMORY
 {

@@ -10,7 +10,7 @@
   #define MBED_APP_SIZE 0x00080000
 #endif 
 
-StackSize = 0x800;
+StackSize = 0x400;
 SPIM_CCM_START = 0x20020000;
 SPIM_CCM_END = 0x20028000;
 
