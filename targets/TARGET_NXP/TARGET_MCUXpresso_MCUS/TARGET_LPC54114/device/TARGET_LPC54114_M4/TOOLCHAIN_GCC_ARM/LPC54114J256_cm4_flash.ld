@@ -80,11 +80,11 @@ ENTRY(Reset_Handler)
 
 __ram_vector_table__ = 1;
 
-__stack_size__ = 0x2000;
+__stack_size__ = 0x0400;
 __heap_size__ = 0x4000;
 
 HEAP_SIZE  = DEFINED(__heap_size__)  ? __heap_size__  : 0x0400;
-STACK_SIZE = DEFINED(__stack_size__) ? __stack_size__ : 0x0800;
+STACK_SIZE = DEFINED(__stack_size__) ? __stack_size__ : 0x0400;
 M_VECTOR_RAM_SIZE = DEFINED(__ram_vector_table__) ? 0xE4 : 0x0;
 RPMSG_SHMEM_SIZE = DEFINED(__use_shmem__) ? 0x1800 : 0;
 
