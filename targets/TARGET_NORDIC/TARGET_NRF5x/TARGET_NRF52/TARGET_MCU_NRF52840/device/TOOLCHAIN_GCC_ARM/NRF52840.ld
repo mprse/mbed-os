@@ -243,6 +243,6 @@ SECTIONS
     /* Set the stack top to the end of RAM and move down the stack limit by
      * the size of the stack_dummy section. */
     __StackTop = ORIGIN(RAM) + LENGTH(RAM);
-    __StackLimit = __StackTop - SIZEOF(.stack);
+    __StackLimit = __StackTop - 1024;
     PROVIDE(__stack = __StackTop);
 }
