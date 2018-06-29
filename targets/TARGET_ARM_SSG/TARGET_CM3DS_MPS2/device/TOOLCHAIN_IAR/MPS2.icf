@@ -56,9 +56,16 @@ define symbol __ICFEDIT_region_RAM_start__    = ZBT_SSRAM23_START + NVIC_VECTORS
 define symbol __ICFEDIT_region_RAM_end__      = ZBT_SSRAM23_START + ZBT_SSRAM23_SIZE;
 
 /* Sizes */
+
+if (isdefinedsymbol(MBED_CONF_RTOS_PRESENT)) {
+    define symbol STACK_SIZE = 0x400;
+} else {
+    define symbol STACK_SIZE = 0x1000;
+}
+
 /* Heap and Stack size */
-define symbol __ICFEDIT_size_heap__   = 0xF000;
-define symbol __ICFEDIT_size_cstack__ = 0x1000;
+define symbol __ICFEDIT_size_heap__   = 0x10000 - STACK_SIZE;
+define symbol __ICFEDIT_size_cstack__ = STACK_SIZE;
 
 define memory mem with size = 4G;
 define region ROM_region      = mem:[from __ICFEDIT_region_ROM_start__   to __ICFEDIT_region_ROM_end__];

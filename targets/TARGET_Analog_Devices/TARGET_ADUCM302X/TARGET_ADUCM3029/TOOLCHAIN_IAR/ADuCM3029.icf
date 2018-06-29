@@ -42,6 +42,12 @@ define symbol ADUCM_SECTOR_SIZE = 0x800;
 
 define symbol ADUCM_VECTOR_SIZE = 0x1A0;
 
+if (isdefinedsymbol(MBED_CONF_RTOS_PRESENT)) {
+    define symbol STACK_SIZE = 0x400;
+} else {
+    define symbol STACK_SIZE = 0x1000;
+}
+
 define memory mem with size               = 4G;
 define region ROM_PAGE0_INTVEC            = mem:[from MBED_APP_START size ADUCM_VECTOR_SIZE];
 define region ROM_PAGE0_CHECKSUM          = mem:[from MBED_APP_START+ADUCM_VECTOR_SIZE size ADUCM_SECTOR_SIZE-ADUCM_VECTOR_SIZE];
@@ -49,8 +55,8 @@ define region ROM_REGION                  = mem:[from MBED_APP_START+ADUCM_SECTO
 define region RAM_bank1_region            = mem:[from 0x20000200 size 0x00003E00];
 define region RAM_bank2_region            = mem:[from 0x20004000 size 0x00004000]
                                           | mem:[from 0x20040000 size 0x00007000];
-define block CSTACK   with alignment = 16, size = 0x1000 { };
-define block HEAP     with alignment = 16, size = 0x2000 { };
+define block CSTACK   with alignment = 16, size = STACK_SIZE { };
+define block HEAP     with alignment = 16, size = 0x3000 - STACK_SIZE { };
 do not initialize                         { section .noinit };
 initialize by copy                        { rw };
 place at start of ROM_PAGE0_INTVEC        { ro section .vectors };
