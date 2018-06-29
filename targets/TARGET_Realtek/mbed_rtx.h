@@ -31,12 +31,9 @@
     extern uint32_t             __StackLimit[];
     extern uint32_t             __HeapLimit[];
     #define INITIAL_SP          (__StackTop)
-#endif
+    #define ISR_STACK_START     ((unsigned char*)__StackLimit)
+    #define ISR_STACK_SIZE      ((uint32_t)((uint32_t)__StackTop - (uint32_t)__StackLimit))
 
-#if defined(__GNUC__)
-#ifndef ISR_STACK_SIZE
-#define ISR_STACK_SIZE          (0x1000)
-#endif
 #endif
 
 #endif

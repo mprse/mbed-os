@@ -134,6 +134,12 @@ extern uint32_t               __HeapLimit[];
 #define HEAP_SIZE             ((uint32_t)((uint32_t)__HeapLimit - (uint32_t)HEAP_START))
 #define ISR_STACK_START       ((unsigned char*)__StackLimit)
 #define ISR_STACK_SIZE        ((uint32_t)((uint32_t)__StackTop - (uint32_t)__StackLimit))
+#elif (defined(__CC_ARM))
+#elif (defined(__CC_ARM))
+extern uint32_t               Image$$ARM_LIB_STACK$$ZI$$Base[];
+extern uint32_t               Image$$ARM_LIB_STACK$$ZI$$Length[];
+#define ISR_STACK_START       ((unsigned char*)Image$$ARM_LIB_STACK$$ZI$$Base)
+#define ISR_STACK_SIZE        ((uint32_t)Image$$ARM_LIB_STACK$$ZI$$Length)
 #endif
 
 #endif  // MBED_MBED_RTX_H
