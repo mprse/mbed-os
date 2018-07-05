@@ -18,7 +18,7 @@ if (isdefinedsymbol(MBED_CONF_RTOS_PRESENT)) {
     define symbol STACK_SIZE = 0x1000;
 }
 
-/*Heap 1/4 of ram and stack 1024/4096 */
+/* Heap and Stack size */
 define symbol __ICFEDIT_size_cstack__ = STACK_SIZE;
 define symbol __ICFEDIT_size_heap__   = 0x1200 - STACK_SIZE;
 /**** End of ICF editor section. ###ICF###*/

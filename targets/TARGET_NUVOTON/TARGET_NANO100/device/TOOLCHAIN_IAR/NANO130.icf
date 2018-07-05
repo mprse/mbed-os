@@ -9,8 +9,13 @@ define symbol __ICFEDIT_region_ROM_end__   = 0x00020000 - 1;
 define symbol __ICFEDIT_region_IRAM_start__ = 0x20000000;
 define symbol __ICFEDIT_region_IRAM_end__   = 0x20004000 - 1;
 /*-Sizes-*/
-define symbol __ICFEDIT_size_cstack__ = 0x600;
-define symbol __ICFEDIT_size_heap__   = 0x1000;
+if (isdefinedsymbol(MBED_CONF_RTOS_PRESENT)) {
+    define symbol STACK_SIZE = 0x400;
+} else {
+    define symbol STACK_SIZE = 0x1000;
+}
+define symbol __ICFEDIT_size_cstack__ = STACK_SIZE;
+define symbol __ICFEDIT_size_heap__   = 0x1600 - STACK_SIZE;
 /**** End of ICF editor section. ###ICF###*/
 
 

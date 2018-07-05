@@ -44,9 +44,15 @@
 */
 define symbol __ram_vector_table__ = 1;
 
-/* Heap 1/4 of ram and stack 1/8 */
-define symbol __stack_size__=0x2000;
-define symbol __heap_size__=0x4000;
+if (isdefinedsymbol(MBED_CONF_RTOS_PRESENT)) {
+    define symbol STACK_SIZE = 0x400;
+} else {
+    define symbol STACK_SIZE = 0x2000;
+}
+
+/* Heap and Stack size */
+define symbol __stack_size__ = STACK_SIZE;
+define symbol __heap_size__ = 0x6000 - STACK_SIZE;
 
 if (!isdefinedsymbol(MBED_APP_START)) {
     define symbol MBED_APP_START = 0;
