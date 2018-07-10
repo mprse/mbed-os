@@ -15,8 +15,13 @@ _estack = 0x20003000;    /* end of SRAM */
 __SP_INIT = _estack;
 
 /* Generate a link error if heap and stack don't fit into RAM */
+#if defined(MBED_CONF_RTOS_PRESENT)
+  __stack_size = 0x400;                 /* required amount of stack */
+#else
+  __stack_size = 0x1000;                /* required amount of stack */
+#endif
+  
 __heap_size = 0x400;				/* required amount of heap  */
-__stack_size = 0x400; 				/* required amount of stack */
 
 /* Specify the memory areas */
 MEMORY
@@ -192,6 +197,11 @@ SECTIONS
     . = . + __stack_size;
     . = ALIGN(4);
   } > m_data
+  
+  /* Initializes stack on the end of block */
+  __StackTop = ORIGIN(_user_heap_stack) + LENGTH(_user_heap_stack);
+  __StackLimit = __StackTop - __stack_size;
+  PROVIDE(__stack = __StackTop);
   
   .ARM.attributes 0 : { *(.ARM.attributes) }
 }

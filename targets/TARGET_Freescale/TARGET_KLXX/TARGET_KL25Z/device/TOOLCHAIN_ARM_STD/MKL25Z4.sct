@@ -1,3 +1,14 @@
+#! armcc -E
+
+#if (defined(__stack_size__))
+  #define Stack_Size                   __stack_size__
+#else
+  #if (defined(MBED_CONF_RTOS_PRESENT))
+    #define Stack_Size                   0x0400
+  #else
+    #define Stack_Size                   0x1000
+  #endif
+#endif
 
 LR_IROM1 0x00000000 0x20000  {    ; load region size_region (32k)
   ER_IROM1 0x00000000 0x20000  {  ; load address = execution address
@@ -9,6 +20,8 @@ LR_IROM1 0x00000000 0x20000  {    ; load region size_region (32k)
   ; 0x4000 - 0xC0 = 0x3F40
   RW_IRAM1 0x1FFFF0C0 0x3F40 {
    .ANY (+RW +ZI)
+  }
+  ARM_LIB_STACK 0x1FFFF0C0 + 0x3F40 - Stack_Size EMPTY Stack_Size {
   }
 }
 

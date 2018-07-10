@@ -11,9 +11,13 @@ define symbol __ICFEDIT_region_NVIC_end__   = 0x1fffe0f7;
 define symbol __ICFEDIT_region_RAM_start__ = 0x1fffe0f8;
 define symbol __ICFEDIT_region_RAM_end__   = 0x1fffffff;
 /*-Sizes-*/
-/*Heap 1/4 of ram and stack 1/8*/
-define symbol __ICFEDIT_size_cstack__ = 0x600;
-define symbol __ICFEDIT_size_heap__   = 0xC00;
+/*Stack 1KB and the rest for Heap*/
+if (isdefinedsymbol(MBED_CONF_RTOS_PRESENT)) {
+    define symbol __ICFEDIT_size_cstack__ = 0x400;
+} else {
+    define symbol __ICFEDIT_size_cstack__ = 0x1000;
+}
+define symbol __ICFEDIT_size_heap__   = (0x1200 - __ICFEDIT_size_cstack__);
 /**** End of ICF editor section. ###ICF###*/
 
 define symbol __region_RAM2_start__ 		= 0x20000000;
