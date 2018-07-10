@@ -1233,6 +1233,7 @@ class mbedToolchain:
                 ", ".join(r.name for r in regions)
             ))
             self._add_all_regions(regions, "MBED_RAM")
+            
         try:
             rom_start, rom_size = self.config.rom
             Region = namedtuple("Region", "name start size")
@@ -1247,6 +1248,17 @@ class mbedToolchain:
     def set_config_data(self, config_data):
         self.config_data = config_data
         self.add_regions()
+        
+        # pass "MBED_CONF_RTOS_PRESENT" symbol to linker scripts
+        conf_header = self.config.config_to_header(self.config_data)
+        rtos_present_lines = [line for line in conf_header.split('\n') if "MBED_CONF_RTOS_PRESENT" in line]
+        
+        # if "MBED_CONF_RTOS_PRESENT" symbol exists should be defined exactly once
+        if (len(rtos_present_lines) > 0):
+            rtos_present = 1 if "1" in rtos_present_lines[0] else 0
+            define_string = self.make_ld_define("MBED_CONF_RTOS_PRESENT", rtos_present)
+            self.ld.append(define_string)
+            self.flags["ld"].append(define_string)
 
     # Creates the configuration header if needed:
     # - if there is no configuration data, "mbed_config.h" is not create (or deleted if it exists).
@@ -1271,6 +1283,7 @@ class mbedToolchain:
             prev_data = None
         # Get the current configuration data
         crt_data = self.config.config_to_header(self.config_data) if self.config_data else None
+
         # "changed" indicates if a configuration change was detected
         changed = False
         if prev_data is not None: # a previous mbed_config.h exists
