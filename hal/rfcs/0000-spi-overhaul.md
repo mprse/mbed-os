@@ -96,7 +96,11 @@ typedef struct {
      *  testing.
      */
     uint32_t    maximum_frequency;
-    /** Each bit represents the corresponding word length. lsb => 1bit, msb => 32bit. */
+    /** Each bit represents the corresponding word length. lsb => 1bit, msb => 32bits.
+     *
+     * For example, if the peripheral supports 8 bits, 12bits to 16bits and 32bits,
+     * the value should be 0x8000F880.
+     */
     uint32_t    word_length;
     bool        support_slave_mode; /**< If true, the device can handle SPI slave mode. */
 } spi_capabilities_t;
