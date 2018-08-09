@@ -2,7 +2,7 @@
 
 ## Description
 
-This updates targets the SPI HAL as the first step of a wide plan for all HAL APIs.
+This update targets the SPI HAL as the first step of a wide plan for all HAL APIs.
 
 ## Motivation
 
@@ -137,7 +137,7 @@ void spi_free(spi_t *obj);
 - At least a symbol width of 8bit must be supported.
 - The supported frequency range must include the range [0.2..2] MHz.
 - The shortest part of the duty cycle must not be shorter than 50% of the expected period.
-- `spi_init()` initializes the pins. 
+- `spi_init()` initializes the pins leaving the configuration registers unchanged.
 - `spi_init()` ignores the `SS` pin if `is_slave` is false.
 - `spi_free()` resets the pins to their default state.
 - `spi_free()` disables the peripheral clock.
@@ -149,8 +149,11 @@ void spi_free(spi_t *obj);
     2. Clock idle state is *high*, data are sampled when the clock becomes *active* (polarity = 1, phase = 0)
     3. Clock idle state is *high*, data are sampled when the clock becomes *inactive* (polarity = 1, phase = 1)
   - the bit ordering (lsb/msb first).
+- `spi_format()` updates the configuration of the peripheral except the baud rate generator.
 - `spi_frequency()` sets the frequency to use during the transfer.
 - `spi_frequency()` returns the actual frequency that will be used.
+- `spi_frequency()` updates the baud rate generator leaving other configurations unchanged.
+- `spi_init()`, `spi_frequency()` and `spi_format()` must be called at least once each before initiating any transfer.
 - `spi_transfer()` :
   - writes `tx_len` symbols to the bus.
   - reads `rx_len` symbols from the bus.
