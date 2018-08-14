@@ -93,9 +93,13 @@ void init_spi(spi_t *obj)
     }
 }
 
-void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel)
+void spi_init(spi_t *obj, bool is_slave, PinName mosi, PinName miso, PinName sclk, PinName ssel)
 {
     struct spi_s *spiobj = SPI_S(obj);
+
+    if (is_slave && (ssel == NC)) {
+        MBED_ERROR(MBED_MAKE_ERROR(MBED_MODULE_PLATFORM, MBED_ERROR_CODE_PINMAP_INVALID), "missing slave select pin");
+    }
     SPI_HandleTypeDef *handle = &(spiobj->handle);
 
     // Determine the SPI to use
@@ -163,10 +167,16 @@ void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel
     spiobj->pin_ssel = ssel;
     if (ssel != NC) {
         pinmap_pinout(ssel, PinMap_SPI_SSEL);
-        handle->Init.NSS = SPI_NSS_HARD_OUTPUT;
+        if (is_slave) {
+            handle->Init.NSS = SPI_NSS_HARD_INPUT;
+        } else {
+            handle->Init.NSS = SPI_NSS_HARD_OUTPUT;
+        }
     } else {
         handle->Init.NSS = SPI_NSS_SOFT;
     }
+
+    handle->Init.Mode = is_slave ? SPI_MODE_SLAVE : SPI_MODE_MASTER;
 
     /* Fill default value */
     handle->Instance = SPI_INST(obj);
@@ -176,7 +186,7 @@ void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel
     if (miso != NC) {
         handle->Init.Direction     = SPI_DIRECTION_2LINES;
     } else {
-        handle->Init.Direction      = SPI_DIRECTION_1LINE;
+        handle->Init.Direction     = SPI_DIRECTION_1LINE;
     }
 
     handle->Init.CLKPhase          = SPI_PHASE_1EDGE;
@@ -257,7 +267,7 @@ void spi_free(spi_t *obj)
     }
 }
 
-void spi_format(spi_t *obj, int bits, int mode, int slave)
+void spi_format(spi_t *obj, uint8_t bits, spi_mode_t mode, spi_bit_ordering_t bit_ordering)
 {
     struct spi_s *spiobj = SPI_S(obj);
     SPI_HandleTypeDef *handle = &(spiobj->handle);
@@ -286,22 +296,6 @@ void spi_format(spi_t *obj, int bits, int mode, int slave)
             break;
     }
 
-    if (handle->Init.NSS != SPI_NSS_SOFT) {
-        handle->Init.NSS = (slave) ? SPI_NSS_HARD_INPUT : SPI_NSS_HARD_OUTPUT;
-    }
-
-    handle->Init.Mode = (slave) ? SPI_MODE_SLAVE : SPI_MODE_MASTER;
-
-    if (slave && (handle->Init.Direction == SPI_DIRECTION_1LINE)) {
-        /*  SPI slave implemtation in MBED does not support the 3 wires SPI.
-         *  (e.g. when MISO is not connected). So we're forcing slave in
-         *  2LINES mode. As MISO is not connected, slave will only read
-         *  from master, and cannot write to it. Inform user.
-         */
-        debug("3 wires SPI slave not supported - slave will only read\r\n");
-        handle->Init.Direction = SPI_DIRECTION_2LINES;
-    }
-
     init_spi(obj);
 }
 
@@ -321,10 +315,10 @@ static const uint16_t baudrate_prescaler_table[] =  {SPI_BAUDRATEPRESCALER_2,
                                                      SPI_BAUDRATEPRESCALER_256
                                                     };
 
-void spi_frequency(spi_t *obj, int hz)
+uint32_t spi_frequency(spi_t *obj, uint32_t hz)
 {
     struct spi_s *spiobj = SPI_S(obj);
-    int spi_hz = 0;
+    uint32_t spi_hz = 0;
     uint8_t prescaler_rank = 0;
     uint8_t last_index = (sizeof(baudrate_prescaler_table) / sizeof(baudrate_prescaler_table[0])) - 1;
     SPI_HandleTypeDef *handle = &(spiobj->handle);
@@ -349,40 +343,11 @@ void spi_frequency(spi_t *obj, int hz)
     DEBUG_PRINTF("spi_frequency, request:%d, select:%d\r\n", hz, spi_hz);
 
     init_spi(obj);
+
+    return spi_hz;
 }
 
-static inline int ssp_readable(spi_t *obj)
-{
-    int status;
-    struct spi_s *spiobj = SPI_S(obj);
-    SPI_HandleTypeDef *handle = &(spiobj->handle);
-
-    // Check if data is received
-    status = ((__HAL_SPI_GET_FLAG(handle, SPI_FLAG_RXNE) != RESET) ? 1 : 0);
-    return status;
-}
-
-static inline int ssp_writeable(spi_t *obj)
-{
-    int status;
-    struct spi_s *spiobj = SPI_S(obj);
-    SPI_HandleTypeDef *handle = &(spiobj->handle);
-
-    // Check if data is transmitted
-    status = ((__HAL_SPI_GET_FLAG(handle, SPI_FLAG_TXE) != RESET) ? 1 : 0);
-    return status;
-}
-
-static inline int ssp_busy(spi_t *obj)
-{
-    int status;
-    struct spi_s *spiobj = SPI_S(obj);
-    SPI_HandleTypeDef *handle = &(spiobj->handle);
-    status = ((__HAL_SPI_GET_FLAG(handle, SPI_FLAG_BSY) != RESET) ? 1 : 0);
-    return status;
-}
-
-int spi_master_write(spi_t *obj, int value)
+static uint32_t spi_master_write(spi_t *obj, uint32_t value)
 {
     struct spi_s *spiobj = SPI_S(obj);
     SPI_HandleTypeDef *handle = &(spiobj->handle);
@@ -425,23 +390,25 @@ int spi_master_write(spi_t *obj, int value)
     }
 }
 
-int spi_master_block_write(spi_t *obj, const char *tx_buffer, int tx_length,
-                           char *rx_buffer, int rx_length, char write_fill)
+uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
+                           void *rx_buffer, uint32_t rx_length, const void *write_fill)
 {
     struct spi_s *spiobj = SPI_S(obj);
     SPI_HandleTypeDef *handle = &(spiobj->handle);
-    int total = (tx_length > rx_length) ? tx_length : rx_length;
-    int i = 0;
+    uint32_t total = (tx_length > rx_length) ? tx_length : rx_length;
+    uint32_t i = 0;
     if (handle->Init.Direction == SPI_DIRECTION_2LINES) {
         for (i = 0; i < total; i++) {
-            char out = (i < tx_length) ? tx_buffer[i] : write_fill;
-            char in = spi_master_write(obj, out);
+            // FIXME: handle various data size
+            uint32_t out = (i < tx_length) ? ((uint8_t *)tx_buffer)[i] : *(uint8_t *)write_fill;
+            uint32_t in = spi_master_write(obj, out);
             if (i < rx_length) {
-                rx_buffer[i] = in;
+                ((uint8_t*)rx_buffer)[i] = (uint8_t)in;
             }
         }
     } else {
         /* In case of 1 WIRE only, first handle TX, then Rx */
+        // FIXME: or the other way in slave mode ?
         if (tx_length != 0) {
             if (HAL_OK != HAL_SPI_Transmit(handle, (uint8_t *)tx_buffer, tx_length, tx_length * TIMEOUT_1_BYTE)) {
                 /*  report an error */
@@ -457,44 +424,6 @@ int spi_master_block_write(spi_t *obj, const char *tx_buffer, int tx_length,
     }
 
     return total;
-}
-
-int spi_slave_receive(spi_t *obj)
-{
-    return ((ssp_readable(obj) && !ssp_busy(obj)) ? 1 : 0);
-};
-
-int spi_slave_read(spi_t *obj)
-{
-    struct spi_s *spiobj = SPI_S(obj);
-    SPI_HandleTypeDef *handle = &(spiobj->handle);
-    while (!ssp_readable(obj));
-    if (handle->Init.DataSize == SPI_DATASIZE_16BIT) {
-        return LL_SPI_ReceiveData16(SPI_INST(obj));
-    } else {
-        return LL_SPI_ReceiveData8(SPI_INST(obj));
-    }
-}
-
-void spi_slave_write(spi_t *obj, int value)
-{
-    SPI_TypeDef *spi = SPI_INST(obj);
-    struct spi_s *spiobj = SPI_S(obj);
-    SPI_HandleTypeDef *handle = &(spiobj->handle);
-    while (!ssp_writeable(obj));
-    if (handle->Init.DataSize == SPI_DATASIZE_8BIT) {
-        // Force 8-bit access to the data register
-        uint8_t *p_spi_dr = 0;
-        p_spi_dr = (uint8_t *) & (spi->DR);
-        *p_spi_dr = (uint8_t)value;
-    } else { // SPI_DATASIZE_16BIT
-        spi->DR = (uint16_t)value;
-    }
-}
-
-int spi_busy(spi_t *obj)
-{
-    return ssp_busy(obj);
 }
 
 #ifdef DEVICE_SPI_ASYNCH

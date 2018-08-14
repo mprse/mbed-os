@@ -32,7 +32,7 @@ static SPI_Type *const spi_address[] = SPI_BASE_PTRS;
 /* Array of SPI bus clock frequencies */
 static clock_name_t const spi_clocks[] = SPI_CLOCK_FREQS;
 
-void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel)
+void spi_init(spi_t *obj, bool is_slave, PinName mosi, PinName miso, PinName sclk, PinName ssel)
 {
     // determine the SPI to use
     uint32_t spi_mosi = pinmap_peripheral(mosi, PinMap_SPI_MOSI);
@@ -52,6 +52,7 @@ void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel
     if (ssel != NC) {
         pinmap_pinout(ssel, PinMap_SPI_SSEL);
     }
+    obj->slave = is_slave;
 }
 
 void spi_free(spi_t *obj)
@@ -59,40 +60,56 @@ void spi_free(spi_t *obj)
     DSPI_Deinit(spi_address[obj->instance]);
 }
 
-void spi_format(spi_t *obj, int bits, int mode, int slave)
+void spi_format(spi_t *obj, uint8_t bits, spi_mode_t mode, spi_bit_ordering_t bit_ordering)
 {
 
     dspi_master_config_t master_config;
     dspi_slave_config_t slave_config;
+    dspi_clock_polarity_t cpol;
+    dspi_clock_phase_t cpha;
 
-    if (slave) {
+    if ((mode == SPI_MODE_IDLE_HIGH_SAMPLE_FIRST_EDGE) ||
+        (mode == SPI_MODE_IDLE_HIGH_SAMPLE_SECOND_EDGE)) {
+            cpol = kDSPI_ClockPolarityActiveLow;
+    } else {
+            cpol = kDSPI_ClockPolarityActiveHigh;
+    }
+    if ((mode == SPI_MODE_IDLE_HIGH_SAMPLE_FIRST_EDGE) ||
+        (mode == SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE)) {
+            cpha = kDSPI_ClockPhaseFirstEdge;
+    } else {
+            cpha = kDSPI_ClockPhaseSecondEdge;
+    }
+
+    if (obj->slave) {
         /* Slave config */
         DSPI_SlaveGetDefaultConfig(&slave_config);
         slave_config.whichCtar = kDSPI_Ctar0;
         slave_config.ctarConfig.bitsPerFrame = (uint32_t)bits;;
-        slave_config.ctarConfig.cpol = (mode & 0x2) ? kDSPI_ClockPolarityActiveLow : kDSPI_ClockPolarityActiveHigh;
-        slave_config.ctarConfig.cpha = (mode & 0x1) ? kDSPI_ClockPhaseSecondEdge : kDSPI_ClockPhaseFirstEdge;
+        slave_config.ctarConfig.cpol = cpol;
+        slave_config.ctarConfig.cpha = cpha;
 
         DSPI_SlaveInit(spi_address[obj->instance], &slave_config);
     } else {
         /* Master config */
         DSPI_MasterGetDefaultConfig(&master_config);
         master_config.ctarConfig.bitsPerFrame = (uint32_t)bits;;
-        master_config.ctarConfig.cpol = (mode & 0x2) ? kDSPI_ClockPolarityActiveLow : kDSPI_ClockPolarityActiveHigh;
-        master_config.ctarConfig.cpha = (mode & 0x1) ? kDSPI_ClockPhaseSecondEdge : kDSPI_ClockPhaseFirstEdge;
-        master_config.ctarConfig.direction = kDSPI_MsbFirst;
+        master_config.ctarConfig.cpol = cpol;
+        master_config.ctarConfig.cpha = cpha;
+        master_config.ctarConfig.direction = (bit_ordering == SPI_BIT_ORDERING_MSB_FIRST)? kDSPI_MsbFirst : kDSPI_LsbFirst;
         master_config.ctarConfig.pcsToSckDelayInNanoSec = 0;
 
         DSPI_MasterInit(spi_address[obj->instance], &master_config, CLOCK_GetFreq(spi_clocks[obj->instance]));
     }
 }
 
-void spi_frequency(spi_t *obj, int hz)
+uint32_t spi_frequency(spi_t *obj, uint32_t hz)
 {
     uint32_t busClock = CLOCK_GetFreq(spi_clocks[obj->instance]);
-    DSPI_MasterSetBaudRate(spi_address[obj->instance], kDSPI_Ctar0, (uint32_t)hz, busClock);
+    uint32_t actual_br = DSPI_MasterSetBaudRate(spi_address[obj->instance], kDSPI_Ctar0, (uint32_t)hz, busClock);
     //Half clock period delay after SPI transfer
     DSPI_MasterSetDelayTimes(spi_address[obj->instance], kDSPI_Ctar0, kDSPI_LastSckToPcs, busClock, 500000000 / hz);
+    return actual_br;
 }
 
 static inline int spi_readable(spi_t * obj)
@@ -118,43 +135,29 @@ int spi_master_write(spi_t *obj, int value)
     return rx_data & 0xffff;
 }
 
-int spi_master_block_write(spi_t *obj, const char *tx_buffer, int tx_length,
-                           char *rx_buffer, int rx_length, char write_fill) {
-    int total = (tx_length > rx_length) ? tx_length : rx_length;
+uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
+                      void *rx_buffer, uint32_t rx_length, const void *write_fill) {
+    int total;
+    if (tx_length == 1 && rx_length == 1) {
+        ((uint8_t *)rx_buffer)[0] = spi_master_write(obj, (tx_length == 1)?(((uint8_t*)tx_buffer)[0]):*(uint8_t *)write_fill);
+        total = 1;
+    } else {
+        total = (tx_length > rx_length) ? tx_length : rx_length;
 
-    // Default write is done in each and every call, in future can create HAL API instead
-    DSPI_SetDummyData(spi_address[obj->instance], write_fill);
+        // Default write is done in each and every call, in future can create HAL API instead
+        DSPI_SetDummyData(spi_address[obj->instance], *(uint8_t *)write_fill);
 
-    DSPI_MasterTransferBlocking(spi_address[obj->instance], &(dspi_transfer_t){
-          .txData = (uint8_t *)tx_buffer,
-          .rxData = (uint8_t *)rx_buffer,
-          .dataSize = total,
-          .configFlags = kDSPI_MasterCtar0 | kDSPI_MasterPcs0 | kDSPI_MasterPcsContinuous,
-    });
+        DSPI_MasterTransferBlocking(spi_address[obj->instance], &(dspi_transfer_t){
+              .txData = (uint8_t *)tx_buffer,
+              .rxData = (uint8_t *)rx_buffer,
+              .dataSize = total,
+              .configFlags = kDSPI_MasterCtar0 | kDSPI_MasterPcs0 | kDSPI_MasterPcsContinuous,
+        });
 
-    DSPI_ClearStatusFlags(spi_address[obj->instance], kDSPI_RxFifoDrainRequestFlag | kDSPI_EndOfQueueFlag);
+        DSPI_ClearStatusFlags(spi_address[obj->instance], kDSPI_RxFifoDrainRequestFlag | kDSPI_EndOfQueueFlag);
+    }
 
     return total;
-}
-
-int spi_slave_receive(spi_t *obj)
-{
-    return spi_readable(obj);
-}
-
-int spi_slave_read(spi_t *obj)
-{
-    uint32_t rx_data;
-
-    while (!spi_readable(obj));
-    rx_data = DSPI_ReadData(spi_address[obj->instance]);
-    DSPI_ClearStatusFlags(spi_address[obj->instance], kDSPI_RxFifoDrainRequestFlag);
-    return rx_data & 0xffff;
-}
-
-void spi_slave_write(spi_t *obj, int value)
-{
-    DSPI_SlaveWriteDataBlocking(spi_address[obj->instance], (uint32_t)value);
 }
 
 #endif
