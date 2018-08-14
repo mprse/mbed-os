@@ -36,6 +36,9 @@
 namespace mbed {
 /** \addtogroup drivers */
 
+#define SPI_FILL_CHAR       0xFFFFFFFF
+#define SPI_EVENT_COMPLETE  0
+
 /** A SPI Master, used for communicating with SPI slave devices
  *
  * The default format is set to 8-bits, mode 0, and a clock frequency of 1MHz
@@ -290,8 +293,8 @@ protected:
     void aquire(void);
     static SPI *_owner;
     static SingletonPtr<PlatformMutex> _mutex;
-    int _bits;
-    int _mode;
+    uint8_t _bits;
+    spi_mode_t _mode;
     int _hz;
     char _write_fill;
 
