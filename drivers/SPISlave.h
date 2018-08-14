@@ -115,9 +115,9 @@ public:
 protected:
     spi_t _spi;
 
-    int _bits;
-    int _mode;
-    int _hz;
+    uint8_t _bits;
+    spi_mode_t _mode;
+    uint32_t _hz;
 };
 
 } // namespace mbed

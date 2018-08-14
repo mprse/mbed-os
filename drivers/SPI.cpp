@@ -36,13 +36,13 @@ SPI::SPI(PinName mosi, PinName miso, PinName sclk, PinName ssel) :
     _deep_sleep_locked(false),
 #endif
     _bits(8),
-    _mode(0),
+    _mode(SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE),
     _hz(1000000),
-    _write_fill(SPI_FILL_CHAR)
+    _write_fill(0xFF)
 {
     // No lock needed in the constructor
 
-    spi_init(&_spi, mosi, miso, sclk, ssel);
+    spi_init(&_spi, false, mosi, miso, sclk, NC);
     _acquire();
 }
 
@@ -50,12 +50,12 @@ void SPI::format(int bits, int mode)
 {
     lock();
     _bits = bits;
-    _mode = mode;
+    _mode = (spi_mode_t)mode;
     // If changing format while you are the owner then just
     // update format, but if owner is changed then even frequency should be
     // updated which is done by acquire.
     if (_owner == this) {
-        spi_format(&_spi, _bits, _mode, 0);
+        spi_format(&_spi, _bits, _mode, SPI_BIT_ORDERING_MSB_FIRST);
     } else {
         _acquire();
     }
@@ -85,7 +85,7 @@ void SPI::aquire()
 {
     lock();
     if (_owner != this) {
-        spi_format(&_spi, _bits, _mode, 0);
+        spi_format(&_spi, _bits, _mode, SPI_BIT_ORDERING_MSB_FIRST);
         spi_frequency(&_spi, _hz);
         _owner = this;
     }
@@ -96,7 +96,7 @@ void SPI::aquire()
 void SPI::_acquire()
 {
     if (_owner != this) {
-        spi_format(&_spi, _bits, _mode, 0);
+        spi_format(&_spi, _bits, _mode, SPI_BIT_ORDERING_MSB_FIRST);
         spi_frequency(&_spi, _hz);
         _owner = this;
     }
@@ -106,7 +106,8 @@ int SPI::write(int value)
 {
     lock();
     _acquire();
-    int ret = spi_master_write(&_spi, value);
+    uint32_t ret = 0;
+    spi_transfer(&_spi, &value, _bits/8, &ret, _bits/8, NULL);
     unlock();
     return ret;
 }
@@ -115,7 +116,7 @@ int SPI::write(const char *tx_buffer, int tx_length, char *rx_buffer, int rx_len
 {
     lock();
     _acquire();
-    int ret = spi_master_block_write(&_spi, tx_buffer, tx_length, rx_buffer, rx_length, _write_fill);
+    int ret = spi_transfer(&_spi, tx_buffer, tx_length, rx_buffer, rx_length, &_write_fill);
     unlock();
     return ret;
 }
