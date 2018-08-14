@@ -22,19 +22,19 @@ namespace mbed {
 SPISlave::SPISlave(PinName mosi, PinName miso, PinName sclk, PinName ssel) :
     _spi(),
     _bits(8),
-    _mode(0),
+    _mode(SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE),
     _hz(1000000)
 {
-    spi_init(&_spi, mosi, miso, sclk, ssel);
-    spi_format(&_spi, _bits, _mode, 1);
+    spi_init(&_spi, true, mosi, miso, sclk, ssel);
+    spi_format(&_spi, _bits, _mode, SPI_BIT_ORDERING_MSB_FIRST);
     spi_frequency(&_spi, _hz);
 }
 
 void SPISlave::format(int bits, int mode)
 {
     _bits = bits;
-    _mode = mode;
-    spi_format(&_spi, _bits, _mode, 1);
+    _mode = (spi_mode_t)mode;
+    spi_format(&_spi, _bits, _mode, SPI_BIT_ORDERING_MSB_FIRST);
 }
 
 void SPISlave::frequency(int hz)
@@ -45,17 +45,17 @@ void SPISlave::frequency(int hz)
 
 int SPISlave::receive(void)
 {
-    return (spi_slave_receive(&_spi));
+    return 0;//(spi_slave_receive(&_spi));
 }
 
 int SPISlave::read(void)
 {
-    return (spi_slave_read(&_spi));
+    return 0; //(spi_slave_read(&_spi));
 }
 
 void SPISlave::reply(int value)
 {
-    spi_slave_write(&_spi, value);
+    //spi_slave_write(&_spi, value);
 }
 
 } // namespace mbed
