@@ -93,6 +93,16 @@ void init_spi(spi_t *obj)
     }
 }
 
+SPIName spi_get_module(PinName mosi, PinName miso, PinName sclk) {
+    SPIName spi_mosi = (SPIName)pinmap_peripheral(mosi, PinMap_SPI_MOSI);
+    SPIName spi_miso = (SPIName)pinmap_peripheral(miso, PinMap_SPI_MISO);
+    SPIName spi_sclk = (SPIName)pinmap_peripheral(sclk, PinMap_SPI_SCLK);
+
+    SPIName spi_data = (SPIName)pinmap_merge(spi_mosi, spi_miso);
+
+    return (SPIName)pinmap_merge(spi_data, spi_sclk);
+}
+
 void spi_init(spi_t *obj, bool is_slave, PinName mosi, PinName miso, PinName sclk, PinName ssel)
 {
     struct spi_s *spiobj = SPI_S(obj);
@@ -103,15 +113,10 @@ void spi_init(spi_t *obj, bool is_slave, PinName mosi, PinName miso, PinName scl
     SPI_HandleTypeDef *handle = &(spiobj->handle);
 
     // Determine the SPI to use
-    SPIName spi_mosi = (SPIName)pinmap_peripheral(mosi, PinMap_SPI_MOSI);
-    SPIName spi_miso = (SPIName)pinmap_peripheral(miso, PinMap_SPI_MISO);
-    SPIName spi_sclk = (SPIName)pinmap_peripheral(sclk, PinMap_SPI_SCLK);
+    SPIName spi_module = spi_get_module(mosi, miso, sclk);
     SPIName spi_ssel = (SPIName)pinmap_peripheral(ssel, PinMap_SPI_SSEL);
 
-    SPIName spi_data = (SPIName)pinmap_merge(spi_mosi, spi_miso);
-    SPIName spi_cntl = (SPIName)pinmap_merge(spi_sclk, spi_ssel);
-
-    spiobj->spi = (SPIName)pinmap_merge(spi_data, spi_cntl);
+    spiobj->spi = (SPIName)pinmap_merge(spi_module, spi_ssel);
     MBED_ASSERT(spiobj->spi != (SPIName)NC);
 
 #if defined SPI1_BASE

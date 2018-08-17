@@ -32,17 +32,23 @@ static SPI_Type *const spi_address[] = SPI_BASE_PTRS;
 /* Array of SPI bus clock frequencies */
 static clock_name_t const spi_clocks[] = SPI_CLOCK_FREQS;
 
-void spi_init(spi_t *obj, bool is_slave, PinName mosi, PinName miso, PinName sclk, PinName ssel)
-{
-    // determine the SPI to use
+SPIName spi_get_module(PinName mosi, PinName miso, PinName sclk) {
     uint32_t spi_mosi = pinmap_peripheral(mosi, PinMap_SPI_MOSI);
     uint32_t spi_miso = pinmap_peripheral(miso, PinMap_SPI_MISO);
     uint32_t spi_sclk = pinmap_peripheral(sclk, PinMap_SPI_SCLK);
-    uint32_t spi_ssel = pinmap_peripheral(ssel, PinMap_SPI_SSEL);
+    
     uint32_t spi_data = pinmap_merge(spi_mosi, spi_miso);
-    uint32_t spi_cntl = pinmap_merge(spi_sclk, spi_ssel);
+    return pinmap_merge(spi_data, spi_sclk);
+}
 
-    obj->instance = pinmap_merge(spi_data, spi_cntl);
+void spi_init(spi_t *obj, bool is_slave, PinName mosi, PinName miso, PinName sclk, PinName ssel)
+{
+    // determine the SPI to use
+    uint32_t spi_module = (uint32_t)spi_get_module(mosi, miso, sclk);
+    uint32_t spi_ssel = pinmap_peripheral(ssel, PinMap_SPI_SSEL);
+    MBED_ASSERT(spi_module != NC);
+
+    obj->instance = pinmap_merge(spi_module, spi_ssel);
     MBED_ASSERT((int)obj->instance != NC);
 
     // pin out the spi pins
@@ -81,6 +87,10 @@ void spi_format(spi_t *obj, uint8_t bits, spi_mode_t mode, spi_bit_ordering_t bi
             cpha = kDSPI_ClockPhaseSecondEdge;
     }
 
+    /* Bits: values between 4 and 16 are valid */
+    MBED_ASSERT(bits >= 4 && bits <= 16);
+    obj->bits = bits;
+
     if (obj->slave) {
         /* Slave config */
         DSPI_SlaveGetDefaultConfig(&slave_config);
@@ -117,7 +127,7 @@ static inline int spi_readable(spi_t * obj)
     return (DSPI_GetStatusFlags(spi_address[obj->instance]) & kDSPI_RxFifoDrainRequestFlag);
 }
 
-int spi_master_write(spi_t *obj, int value)
+static int spi_master_write(spi_t *obj, int value)
 {
     dspi_command_data_config_t command;
     uint32_t rx_data;
@@ -139,13 +149,19 @@ uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
                       void *rx_buffer, uint32_t rx_length, const void *write_fill) {
     int total;
     if (tx_length == 1 && rx_length == 1) {
-        ((uint8_t *)rx_buffer)[0] = spi_master_write(obj, (tx_length == 1)?(((uint8_t*)tx_buffer)[0]):*(uint8_t *)write_fill);
+        if (obj->bits <= 8) {
+            ((uint8_t *)rx_buffer)[0] = spi_master_write(obj, (tx_length == 1)?(((uint8_t*)tx_buffer)[0]):*(uint8_t *)write_fill);
+        } else if (obj->bits <= 16) {
+            ((uint16_t *)rx_buffer)[0] = spi_master_write(obj, (tx_length == 1)?(((uint16_t*)tx_buffer)[0]):*(uint16_t *)write_fill);
+        } else if (obj->bits <= 32) {
+            ((uint32_t *)rx_buffer)[0] = spi_master_write(obj, (tx_length == 1)?(((uint32_t*)tx_buffer)[0]):*(uint32_t *)write_fill);
+        } // else trap !
         total = 1;
     } else {
         total = (tx_length > rx_length) ? tx_length : rx_length;
 
         // Default write is done in each and every call, in future can create HAL API instead
-        DSPI_SetDummyData(spi_address[obj->instance], *(uint8_t *)write_fill);
+        DSPI_SetDummyData(spi_address[obj->instance], *(uint32_t *)write_fill);
 
         DSPI_MasterTransferBlocking(spi_address[obj->instance], &(dspi_transfer_t){
               .txData = (uint8_t *)tx_buffer,
