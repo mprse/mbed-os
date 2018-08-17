@@ -79,7 +79,6 @@ namespace mbed {
 class SPI : private NonCopyable<SPI> {
 
 public:
-
     /** Create a SPI master connected to the specified pins
      *
      *  mosi or miso can be specified as NC if not used
@@ -106,12 +105,14 @@ public:
      * @endcode
      */
     void format(int bits, int mode = 0);
+    void format(uint8_t bits, spi_mode_t mode = SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, bool msb_first = true);
 
     /** Set the spi bus clock frequency
      *
      *  @param hz SCLK frequency in hz (default = 1MHz)
      */
     void frequency(int hz = 1000000);
+    uint32_t frequency(uint32_t hz = 1000000);
 
     /** Write to the SPI Slave and return the response
      *
@@ -154,8 +155,21 @@ public:
       * @param data    Default character to be transmitted while read operation
       */
     void set_default_write_value(char data);
+    virtual ~SPI()
+    {
+    }
+
+protected:
+    void acquire(void);
+
+private:
+    /* Private acquire function without locking/unlocking
+     * Implemented in order to avoid duplicate locking and boost performance
+     */
+    uint32_t _acquire(void);
 
 #if DEVICE_SPI_ASYNCH
+public:
 
     /** Start non-blocking SPI transfer using 8bit buffers.
      *
@@ -259,7 +273,6 @@ private:
 
 
 #if TRANSACTION_QUEUE_SIZE_SPI
-
     /** Start a new transaction
      *
      *  @param data Transaction data
@@ -271,17 +284,23 @@ private:
     */
     void dequeue_transaction();
     static CircularBuffer<Transaction<SPI>, TRANSACTION_QUEUE_SIZE_SPI> _transaction_buffer;
-#endif
+#endif // TRANSACTION_QUEUE_SIZE_SPI
 
-#endif
-
-public:
-    virtual ~SPI()
-    {
-    }
+#endif // DEVICE_SPI_ASYNCH
 
 protected:
-    spi_t _spi;
+    struct spi_peripheral_s {
+        SPIName name;
+        spi_t spi;
+        PlatformMutex mutex;
+        SPI *owner = NULL;
+    };
+    // holds spi_peripheral_s per peripheral on the device.
+    // Drawback: it costs ram size even if the device is not used.
+    static spi_peripheral_s _peripherals[SPI_COUNT];
+
+    uint32_t _id;
+    spi_peripheral_s *_self;
 
 #if DEVICE_SPI_ASYNCH
     CThunk<SPI> _irq;
@@ -290,19 +309,12 @@ protected:
     bool _deep_sleep_locked;
 #endif
 
-    void aquire(void);
-    static SPI *_owner;
-    static SingletonPtr<PlatformMutex> _mutex;
+    // Configuration.
     uint8_t _bits;
     spi_mode_t _mode;
+    bool _msb_first;
     int _hz;
-    char _write_fill;
-
-private:
-    /* Private acquire function without locking/unlocking
-     * Implemented in order to avoid duplicate locking and boost performance
-     */
-    void _acquire(void);
+    uint32_t _write_fill;
 };
 
 } // namespace mbed

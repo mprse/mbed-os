@@ -27,79 +27,106 @@ namespace mbed {
 #if DEVICE_SPI_ASYNCH && TRANSACTION_QUEUE_SIZE_SPI
 CircularBuffer<Transaction<SPI>, TRANSACTION_QUEUE_SIZE_SPI> SPI::_transaction_buffer;
 #endif
+SPI::spi_peripheral_s SPI::_peripherals[SPI_COUNT];
 
 SPI::SPI(PinName mosi, PinName miso, PinName sclk, PinName ssel) :
-    _spi(),
+    _id(),
+    _self(),
 #if DEVICE_SPI_ASYNCH
-    _irq(this),
     _usage(DMA_USAGE_NEVER),
     _deep_sleep_locked(false),
 #endif
     _bits(8),
     _mode(SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE),
+    _msb_first(true),
     _hz(1000000),
     _write_fill(0xFF)
 {
     // No lock needed in the constructor
+    // get_module
+   
+    SPIName name = spi_get_module(mosi, miso, sclk);
 
-    spi_init(&_spi, false, mosi, miso, sclk, NC);
-    _acquire();
+    core_util_critical_section_enter();
+    // lookup in a critical section if we already have it else initialize it
+    for (; _id < SPI_COUNT; _id++) {
+        if ((_peripherals[_id].name == name) ||
+            (_peripherals[_id].name == 0)) {
+            _self = &_peripherals[_id];
+            break;
+        }
+    }
+    if (_self->name == 0) {
+        _self->name = name;
+        // XXX: we may want to ensure that it was previously initialized with the same mosi/miso/sclk/ss pins
+        spi_init(&_self->spi, false, mosi, miso, sclk, NC);
+    }
+    core_util_critical_section_exit();
+
+    // we don't need to _acquire at this stage.
+    // this will be done anyway before any operation.
 }
 
 void SPI::format(int bits, int mode)
 {
+    format(bits, (spi_mode_t)mode, true);
+}
+
+void SPI::format(uint8_t bits, spi_mode_t mode, bool msb_first)
+{
     lock();
     _bits = bits;
-    _mode = (spi_mode_t)mode;
+    _mode = mode;
+    _msb_first = msb_first;
     // If changing format while you are the owner then just
     // update format, but if owner is changed then even frequency should be
     // updated which is done by acquire.
-    if (_owner == this) {
-        spi_format(&_spi, _bits, _mode, SPI_BIT_ORDERING_MSB_FIRST);
+    if (_self->owner == this) {
+        spi_format(&_self->spi, _bits, _mode, _msb_first?SPI_BIT_ORDERING_MSB_FIRST:SPI_BIT_ORDERING_LSB_FIRST);
     } else {
         _acquire();
     }
     unlock();
 }
 
-void SPI::frequency(int hz)
+void SPI::frequency(int hz) {
+    frequency((uint32_t)hz);
+}
+uint32_t SPI::frequency(uint32_t hz)
 {
+    uint32_t actual_hz;
     lock();
     _hz = hz;
     // If changing format while you are the owner then just
     // update frequency, but if owner is changed then even frequency should be
     // updated which is done by acquire.
-    if (_owner == this) {
-        spi_frequency(&_spi, _hz);
+    if (_self->owner == this) {
+        actual_hz = spi_frequency(&_self->spi, _hz);
     } else {
-        _acquire();
+        actual_hz = _acquire();
     }
     unlock();
+    return actual_hz;
 }
 
-SPI *SPI::_owner = NULL;
-SingletonPtr<PlatformMutex> SPI::_mutex;
 
-// ignore the fact there are multiple physical spis, and always update if it wasn't us last
-void SPI::aquire()
+void SPI::acquire()
 {
     lock();
-    if (_owner != this) {
-        spi_format(&_spi, _bits, _mode, SPI_BIT_ORDERING_MSB_FIRST);
-        spi_frequency(&_spi, _hz);
-        _owner = this;
-    }
+    _acquire();
     unlock();
 }
 
 // Note: Private function with no locking
-void SPI::_acquire()
+uint32_t SPI::_acquire()
 {
-    if (_owner != this) {
-        spi_format(&_spi, _bits, _mode, SPI_BIT_ORDERING_MSB_FIRST);
-        spi_frequency(&_spi, _hz);
-        _owner = this;
+    uint32_t actual_hz = 0;
+    if (_self->owner != this) {
+        spi_format(&_self->spi, _bits, _mode, _msb_first?SPI_BIT_ORDERING_MSB_FIRST:SPI_BIT_ORDERING_LSB_FIRST);
+        actual_hz = spi_frequency(&_self->spi, _hz);
+        _self->owner = this;
     }
+    return actual_hz;
 }
 
 int SPI::write(int value)
@@ -107,7 +134,7 @@ int SPI::write(int value)
     lock();
     _acquire();
     uint32_t ret = 0;
-    spi_transfer(&_spi, &value, _bits/8, &ret, _bits/8, NULL);
+    spi_transfer(&_self->spi, &value, _bits/8, &ret, _bits/8, NULL);
     unlock();
     return ret;
 }
@@ -116,25 +143,25 @@ int SPI::write(const char *tx_buffer, int tx_length, char *rx_buffer, int rx_len
 {
     lock();
     _acquire();
-    int ret = spi_transfer(&_spi, tx_buffer, tx_length, rx_buffer, rx_length, &_write_fill);
+    int ret = spi_transfer(&_self->spi, tx_buffer, tx_length, rx_buffer, rx_length, &_write_fill);
     unlock();
     return ret;
 }
 
 void SPI::lock()
 {
-    _mutex->lock();
+    _self->mutex.lock();
 }
 
 void SPI::unlock()
 {
-    _mutex->unlock();
+    _self->mutex.unlock();
 }
 
 void SPI::set_default_write_value(char data)
 {
     lock();
-    _write_fill = data;
+    _write_fill = (uint32_t)data;
     unlock();
 }
 
