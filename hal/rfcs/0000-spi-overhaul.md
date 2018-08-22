@@ -57,7 +57,8 @@ In order to provide a meaningful API, this RFC will consider the following use c
   - SPI Slave block transfer : Not supported in current API
  
   The asynchronous API is particularly important when dealing with multiple interfaces. Indeed, handling simultaneously two SPI transfers would require two thread with a blocking API while only one is required by the asynchronous API saving kilobytes of RAM.
-
+- Half-duplex mode:
+  The [LPS22HB](https://www.st.com/en/mems-and-sensors/lps22hb.html) product family can be controlled through a half-duplex SPI interface (called 3 wire mode in the data sheet).
 
 ## API Changes
 
@@ -144,6 +145,7 @@ void spi_free(spi_t *obj);
 - The shortest part of the duty cycle must not be shorter than 50% of the expected period.
 - `spi_init()` initializes the pins leaving the configuration registers unchanged.
 - `spi_init()` ignores the `SS` pin if `is_slave` is false.
+- if `miso` (exclusive) or `mosi` is missing in any function that expects pins, the bus is assumed to be half-duplex.
 - `spi_free()` resets the pins to their default state.
 - `spi_free()` disables the peripheral clock.
 - `spi_format()` sets :
@@ -162,9 +164,13 @@ void spi_free(spi_t *obj);
 - `spi_transfer()` :
   - writes `tx_len` symbols to the bus.
   - reads `rx_len` symbols from the bus.
-  - if `rx_len` > `tx_len` then it sends `(rx_len-tx_len)` additional `fill_symbol` to the bus.
   - if `rx` is NULL then inputs are discarded.
   - if `tx` is NULL then `fill_symbol` is used instead.
+  - In Full-duplex mode :
+    - if `rx_len` > `tx_len` then it sends `(rx_len-tx_len)` additional `fill_symbol` to the bus.
+  - In Half-duplex mode :
+    - as master, `spi_transfer()` sends `tx_len` symbols and then reads `rx_len` symbols.
+    - as slave, `spi_transfer()` receives `rx_len` symbols and then sends `tx_len` symbols.
 - `spi_transter_async()` schedules a transfer to be process the same way ̀`spi_transfer()` would have but asynchronously.
 - `spi_transter_async()` returns immediately with a boolean indicating whether the transfer was successfully scheduled or not.
 - The callback given to `spi_transfer_async()` is invoked when the transfer completes (with a success or an error).
@@ -186,6 +192,7 @@ void spi_free(spi_t *obj);
 - Passing an invalid pointer as `fill_symbol` to `spi_transfer` and `spi_transfer_async` while they would be required by the transfer (`rx_len != tx_len` or `tx==NULL`).
 - Passing an invalid pointer as `handler` to `spi_transfer_async`.
 - Calling `spi_transfer_async_abort()` while no async transfer is being processed (no transfer or a synchronous transfer).
+- In half-duplex mode, any mechanism (if any is present) to detect or prevent collision is implementation defined.
 
 ### Updated flow
 The IRQ flow has slightly changed. In the new API the flow is as follow :
