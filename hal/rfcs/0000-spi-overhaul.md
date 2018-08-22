@@ -187,6 +187,14 @@ void spi_free(spi_t *obj);
 - Passing an invalid pointer as `handler` to `spi_transfer_async`.
 - Calling `spi_transfer_async_abort()` while no async transfer is being processed (no transfer or a synchronous transfer).
 
+### Updated flow
+The IRQ flow has slightly changed. In the new API the flow is as follow :
+![IRQ flow](hal/rfcs/spi_irq_flow.png)
+
+## Testing
+Any regression will be captured as tests are created and added to CI to cover the newly defined behaviours. However, due to hardware limitations, it will not be possible to test them all in CI.
+Some examples will be created in order to cover the remaining behaviours and use-cases. Those examples will be run manually before releases.
+
 ## Impact on partners' implementations
 
 The new API does not impact partners much as most of them factorise HAL implementation to family level.  
