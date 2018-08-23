@@ -144,8 +144,11 @@ void spi_free(spi_t *obj);
 - The supported frequency range must include the range [0.2..2] MHz.
 - The shortest part of the duty cycle must not be shorter than 50% of the expected period.
 - `spi_init()` initializes the pins leaving the configuration registers unchanged.
-- `spi_init()` ignores the `SS` pin if `is_slave` is false.
-- if `miso` (exclusive) or `mosi` is missing in any function that expects pins, the bus is assumed to be half-duplex.
+- `spi_init()` if `is_slave` is false:
+    - if `SS` is `NC` the hal implementation ignores this pin.
+    - if `SS` is not `NC` then the hal implementation owns the pin and its management.
+- When managed by the hal implementation, `SS` is always considered active low.
+- If `miso` (exclusive) or `mosi` is missing in any function that expects pins, the bus is assumed to be half-duplex.
 - `spi_free()` resets the pins to their default state.
 - `spi_free()` disables the peripheral clock.
 - `spi_format()` sets :
