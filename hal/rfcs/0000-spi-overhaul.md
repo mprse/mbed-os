@@ -169,6 +169,12 @@ void spi_free(spi_t *obj);
   - reads `rx_len` symbols from the bus.
   - if `rx` is NULL then inputs are discarded.
   - if `tx` is NULL then `fill_symbol` is used instead.
+  - expects symbols types to be the closest stdint type bigger or equal to its size following the platform's endianness.  
+    eg:
+    - 7bits => uint8_t
+    - 15bits => uint16_t
+    - 16bits => uint16_t
+    - 17bits => uint32_t
   - In Full-duplex mode :
     - if `rx_len` > `tx_len` then it sends `(rx_len-tx_len)` additional `fill_symbol` to the bus.
   - In Half-duplex mode :
@@ -228,8 +234,6 @@ The partner the most impacted by these changes is definitely Freescale/NXP but o
 --
 
 ## Alternative solutions
-If it is decided to expose a peripheral interface instead of a "SPI channel to a slave", all `ss` management can be removed from hal and deferred to the driver (handling `ss` as any other GPIO).  
-This would also reduce differences between SPI Master and SPI Slave use-cases.
 
 ## Questions
 
@@ -238,5 +242,5 @@ This would also reduce differences between SPI Master and SPI Slave use-cases.
   - SPI addresses slave in `spi_init` using the chip select.
   - I²C addresses slave in transfer functions using the address.
   See also: [#7358](https://github.com/ARMmbed/mbed-os/issues/7358)
-- How do we handle half-duplex transfer ?
 
+  The proposed HAL API here allow the SPI driver to have 1 instance per slave while keeping 1 spi_t per peripheral. This gives the user the best of both world.
