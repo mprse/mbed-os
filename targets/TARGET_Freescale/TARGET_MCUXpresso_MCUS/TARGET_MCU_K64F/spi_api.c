@@ -37,10 +37,18 @@ SPIName spi_get_module(PinName mosi, PinName miso, PinName sclk) {
     uint32_t spi_mosi = pinmap_peripheral(mosi, PinMap_SPI_MOSI);
     uint32_t spi_miso = pinmap_peripheral(miso, PinMap_SPI_MISO);
     uint32_t spi_sclk = pinmap_peripheral(sclk, PinMap_SPI_SCLK);
-
     uint32_t spi_data = pinmap_merge(spi_mosi, spi_miso);
-
     return pinmap_merge(spi_data, spi_sclk);
+}
+
+void spi_get_capabilities(SPIName name, PinName SS, spi_capabilities_t *cap)
+{
+    cap->minimum_frequency = 200000;
+    cap->maximum_frequency = 2000000;
+
+    cap->word_length = 0x0000fff0;
+
+    cap->support_slave_mode = true;
 }
 
 void spi_init(spi_t *obj, bool is_slave, PinName mosi, PinName miso, PinName sclk, PinName ssel)

@@ -66,10 +66,10 @@ typedef struct _spi_async_event_t {
 
 typedef void (*spi_async_handler_f)(spi_t *obj, void *ctx, spi_async_event_t *event);
 
-SPIName spi_get_module(PinName MISO, PinName MOSI, PinName MCLK);
+SPIName spi_get_module(PinName mosi, PinName miso, PinName mclk);
 void spi_get_capabilities(SPIName name, PinName SS, spi_capabilities_t *cap);
 
-void spi_init(spi_t *obj, bool is_slave, PinName MISO, PinName MOSI, PinName MCLK, PinName SS);
+void spi_init(spi_t *obj, bool is_slave, PinName mosi, PinName miso, PinName mclk, PinName ssel);
 void spi_format(spi_t *obj, uint8_t bits, spi_mode_t mode, spi_bit_ordering_t bit_ordering);
 uint32_t spi_frequency(spi_t *obj, uint32_t hz);
 uint32_t spi_transfer(spi_t *obj, const void *tx, uint32_t tx_len, void *rx, uint32_t rx_len, const void *fill_symbol);

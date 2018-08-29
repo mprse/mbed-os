@@ -1,0 +1,152 @@
+{
+    "config": {
+        "SINGLE_THREAD_ONLY": "0",
+        "UART_RX": "D0",
+        "UART_TX": "D1",
+        "DIO_0": "D0",
+        "DIO_1": "D1",
+        "DIO_2": "D2",
+        "DIO_3": "D3",
+        "DIO_4": "D4",
+        "DIO_5": "D5",
+        "DIO_6": "D6",
+        "DIO_7": "D7",
+        "DIO_8": "D8",
+        "DIO_9": "D9",
+        "SPI_CS": "D10",
+        "SPI_MOSI": "D11",
+        "SPI_MISO": "D12",
+        "SPI_CLK": "D13",
+        "I2C_SDA": "D14",
+        "I2C_SCL": "D15",
+        "I2C_TEMP_ADDR":"0x90",
+        "I2C_EEPROM_ADDR":"0xA0",
+        "AIN_0": "A0",
+        "AIN_1": "A1",
+        "AIN_2": "A2",
+        "AIN_3": "A3",
+        "AIN_4": "A4",
+        "AIN_5": "A5",
+        "AOUT" : "A5",
+        "PWM_0": "D3",
+        "PWM_1": "D5",
+        "PWM_2": "D6",
+        "PWM_3": "D9",
+        "DEBUG_MSG": 0
+    },
+    "target_overrides": {
+        "NUCLEO_F070RB": {
+            "SPI_CLK":  "PB_3",
+            "SPI_MISO": "PA_6",
+            "SPI_MOSI": "PA_7",
+            "SPI_CS":   "PA_4"
+        },
+        "NUCLEO_F072RB": {
+             "AOUT": "A2"
+        },
+        "NUCLEO_F091RC": {
+             "PWM_0": "D2",
+             "PWM_2": "D7",
+             "AOUT": "A2"
+        },
+        "NUCLEO_F103RB": {
+             "SINGLE_THREAD_ONLY": "1"
+        },
+        "NUCLEO_F207ZG": {
+             "AOUT": "D13"
+        },
+        "NUCLEO_F302R8": {
+             "AOUT": "A2"
+        },
+        "NUCLEO_F303RE": {
+             "AOUT": "A2"
+        },
+        "NUCLEO_F303ZE": {
+             "AOUT": "D13"
+        },
+        "NUCLEO_F334R8": {
+             "AOUT": "A2"
+        },
+        "DISCO_F413ZH": {
+             "AOUT": "A3",
+             "PWM_0": "D0"
+        },
+        "NUCLEO_F429ZI": {
+             "AOUT": "D13",
+             "SPI_CLK":  "PC_10",
+             "SPI_MISO": "PC_11",
+             "SPI_MOSI": "PC_12",
+             "SPI_CS":   "PA_15"
+        },
+        "NUCLEO_F439ZI": {
+             "AOUT": "D13"
+        },
+        "NUCLEO_F446RE": {
+             "AOUT": "A2"
+        },
+        "NUCLEO_F446ZE": {
+             "AOUT": "D13"
+        },
+        "NUCLEO_F746ZG": {
+             "AOUT": "D13"
+        },
+        "DISCO_F746NG": {
+             "PWM_1": "D1"
+        },
+        "NUCLEO_F767ZI": {
+             "AOUT": "D13"
+        },
+        "DISCO_F769NI": {
+             "AOUT": "A1"
+        },
+        "NUCLEO_L053R8": {
+             "AOUT": "A2"
+        },
+        "DISCO_L072CZ_LRWAN1": {
+             "AOUT": "A2",
+             "PWM_0": "D4",
+             "PWM_1": "D4",
+             "PWM_2": "D4",
+             "PWM_3": "D4"
+        },
+        "NUCLEO_L073RZ": {
+             "AOUT": "A2"
+        },
+        "NUCLEO_L152RE": {
+             "AOUT": "A2"
+        },
+        "NUCLEO_L432KC": {
+             "I2C_SDA": "D4",
+             "I2C_SCL": "D5"
+        },
+        "DISCO_L475VG_IOT01A": {
+             "AOUT": "D7"
+        },
+        "NUCLEO_L476RG": {
+             "AOUT": "A2"
+        },
+        "NUCLEO_L486RG": {
+             "AOUT": "A2"
+        },
+        "K64F": {
+             "AOUT": "DAC0_OUT",
+             "DIO_8":"PTC12",
+             "DIO_9":"PTC4",
+             "SPI_CLK":  "PTD1",
+             "SPI_MISO": "PTD3",
+             "SPI_MOSI": "PTD2",
+             "SPI_CS":   "PTD0"
+        },
+        "NCS36510": {
+            "AOUT": "NC",
+            "DIO_7":"NC",
+            "DIO_8":"NC",
+            "DIO_9":"NC",
+            "AIN_4": "NC",
+            "AIN_5": "NC"
+        },
+        "K82F": {
+             "AOUT": "DAC0_OUT"
+        }
+    }
+}
