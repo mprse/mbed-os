@@ -22,7 +22,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "device.h"
+#include "PeripheralNames.h"
+#include "PinNames.h"
+
 #include "hal/dma_api.h"
 #include "hal/buffer.h"
 
@@ -45,7 +47,8 @@ typedef struct {
     uint32_t    maximum_frequency;
     /** Each bit represents the corresponding word length. lsb => 1bit, msb => 32bit. */
     uint32_t    word_length;
-    bool        support_slave_mode; /**< If true, the device can handle SPI slave mode. */
+    bool        support_slave_mode; /**< If true, the device can handle SPI slave mode using hardware management on the specified ssel pin. */
+    bool        half_duplex; /**< If true, the device also supports SPI transmissions using only 3 wires. */
 } spi_capabilities_t;
 
 typedef enum _spi_mode_t {
@@ -62,14 +65,22 @@ typedef enum _spi_bit_ordering_t {
 
 typedef struct _spi_async_event_t {
     uint32_t transfered;
+    bool     error;
 } spi_async_event_t;
 
 typedef void (*spi_async_handler_f)(spi_t *obj, void *ctx, spi_async_event_t *event);
 
-SPIName spi_get_module(PinName MISO, PinName MOSI, PinName MCLK);
-void spi_get_capabilities(SPIName name, PinName SS, spi_capabilities_t *cap);
+/**
+ * Returns a variant of the SPIName enum uniquely identifying a SPI peripheral of the device.
+ */
+SPIName spi_get_module(PinName mosi, PinName miso, PinName mclk);
 
-void spi_init(spi_t *obj, bool is_slave, PinName MISO, PinName MOSI, PinName MCLK, PinName SS);
+/**
+ * Fills the given spi_capabilities_t structure with the capabilities of the given peripheral.
+ */
+void spi_get_capabilities(SPIName name, PinName ssel, spi_capabilities_t *cap);
+
+void spi_init(spi_t *obj, bool is_slave, PinName mosi, PinName miso, PinName mclk, PinName ssel);
 void spi_format(spi_t *obj, uint8_t bits, spi_mode_t mode, spi_bit_ordering_t bit_ordering);
 uint32_t spi_frequency(spi_t *obj, uint32_t hz);
 uint32_t spi_transfer(spi_t *obj, const void *tx, uint32_t tx_len, void *rx, uint32_t rx_len, const void *fill_symbol);

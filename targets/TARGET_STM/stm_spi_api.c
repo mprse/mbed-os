@@ -40,18 +40,10 @@
 #include "pinmap.h"
 #include "PeripheralPins.h"
 #include "spi_device.h"
+#include "device.h"
 
-#if DEVICE_SPI_ASYNCH
-#define SPI_INST(obj)    ((SPI_TypeDef *)(obj->spi.spi))
-#else
 #define SPI_INST(obj)    ((SPI_TypeDef *)(obj->spi))
-#endif
-
-#if DEVICE_SPI_ASYNCH
-#define SPI_S(obj)    (( struct spi_s *)(&(obj->spi)))
-#else
 #define SPI_S(obj)    (( struct spi_s *)(obj))
-#endif
 
 #ifndef DEBUG_STDIO
 #   define DEBUG_STDIO 0
@@ -70,6 +62,138 @@
 #if defined(SPI_FLAG_FRLVL) // STM32F0 STM32F3 STM32F7 STM32L4
 extern HAL_StatusTypeDef HAL_SPIEx_FlushRxFifo(SPI_HandleTypeDef *hspi);
 #endif
+static void spi_irq_handler(void);
+static struct {
+    spi_t *spi;
+    SPIName name;
+} spi_inst_cache[SPI_COUNT] = {0};
+
+#if defined SPI1_BASE
+static void spi1_enable(void) {
+    __HAL_RCC_SPI1_CLK_ENABLE();
+}
+static void spi1_disable(void) {
+    __HAL_RCC_SPI1_FORCE_RESET();
+    __HAL_RCC_SPI1_RELEASE_RESET();
+    __HAL_RCC_SPI1_CLK_DISABLE();
+}
+#endif
+#if defined SPI2_BASE
+static void spi2_enable(void) {
+    __HAL_RCC_SPI2_CLK_ENABLE();
+}
+static void spi2_disable(void) {
+    __HAL_RCC_SPI2_FORCE_RESET();
+    __HAL_RCC_SPI2_RELEASE_RESET();
+    __HAL_RCC_SPI2_CLK_DISABLE();
+}
+#endif
+#if defined SPI3_BASE
+static void spi3_enable(void) {
+    __HAL_RCC_SPI3_CLK_ENABLE();
+}
+static void spi3_disable(void) {
+    __HAL_RCC_SPI3_FORCE_RESET();
+    __HAL_RCC_SPI3_RELEASE_RESET();
+    __HAL_RCC_SPI3_CLK_DISABLE();
+}
+#endif
+#if defined SPI4_BASE
+static void spi4_enable(void) {
+    __HAL_RCC_SPI4_CLK_ENABLE();
+}
+static void spi4_disable(void) {
+    __HAL_RCC_SPI4_FORCE_RESET();
+    __HAL_RCC_SPI4_RELEASE_RESET();
+    __HAL_RCC_SPI4_CLK_DISABLE();
+}
+#endif
+#if defined SPI5_BASE
+static void spi5_enable(void) {
+    __HAL_RCC_SPI5_CLK_ENABLE();
+}
+static void spi5_disable(void) {
+    __HAL_RCC_SPI5_FORCE_RESET();
+    __HAL_RCC_SPI5_RELEASE_RESET();
+    __HAL_RCC_SPI5_CLK_DISABLE();
+}
+#endif
+#if defined SPI6_BASE
+static void spi6_enable(void) {
+    __HAL_RCC_SPI6_CLK_ENABLE();
+}
+static void spi6_disable(void) {
+    __HAL_RCC_SPI6_FORCE_RESET();
+    __HAL_RCC_SPI6_RELEASE_RESET();
+    __HAL_RCC_SPI6_CLK_DISABLE();
+}
+#endif
+
+static const struct {
+    SPIName name;
+    IRQn_Type irq_n;
+    void (*enable)(void);
+    void (*disable)(void);
+} spi_enable_disable[SPI_COUNT] = {
+#if defined SPI1_BASE
+    {
+        .name = SPI_1,
+        .irq_n = SPI1_IRQn,
+        .enable = spi1_enable,
+        .disable = spi1_disable
+    },
+#endif
+#if defined SPI2_BASE
+    {
+        .name = SPI_2,
+        .irq_n = SPI2_IRQn,
+        .enable = spi2_enable,
+        .disable = spi2_disable
+    },
+#endif
+#if defined SPI3_BASE
+    {
+        .name = SPI_3,
+        .irq_n = SPI3_IRQn,
+        .enable = spi3_enable,
+        .disable = spi3_disable
+    },
+#endif
+#if defined SPI4_BASE
+    {
+        .name = SPI_4,
+        .irq_n = SPI4_IRQn,
+        .enable = spi4_enable,
+        .disable = spi4_disable
+    },
+#endif
+#if defined SPI5_BASE
+    {
+        .name = SPI_5,
+        .irq_n = SPI5_IRQn,
+        .enable = spi5_enable,
+        .disable = spi5_disable
+    },
+#endif
+#if defined SPI6_BASE
+    {
+        .name = SPI_6,
+        .irq_n = SPI6_IRQn,
+        .enable = spi6_enable,
+        .disable = spi6_disable
+    },
+#endif
+};
+
+void spi_get_capabilities(SPIName name, PinName ssel, spi_capabilities_t *cap)
+{
+    cap->word_length = 0x00008080;
+    cap->support_slave_mode = true;
+    cap->half_duplex = true;
+
+    cap->minimum_frequency = 200000;
+    cap->maximum_frequency = 4000000;
+}
 
 void init_spi(spi_t *obj)
 {
@@ -78,10 +202,18 @@ void init_spi(spi_t *obj)
 
     __HAL_SPI_DISABLE(handle);
 
-    DEBUG_PRINTF("init_spi: instance=0x%8X\r\n", (int)handle->Instance);
+    DEBUG_PRINTF("init_spi: instance=0x%8X\n", (int)handle->Instance);
     if (HAL_SPI_Init(handle) != HAL_OK) {
         error("Cannot initialize SPI");
     }
+
+#ifdef DEVICE_SPI_ASYNCH
+    IRQn_Type irq_n = spiobj->spiIRQ;
+    NVIC_DisableIRQ(irq_n);
+    NVIC_ClearPendingIRQ(irq_n);
+    NVIC_SetVector(irq_n, (uint32_t)spi_irq_handler);
+    DEBUG_PRINTF("init_spi: vector=%d\n", irq_n);
+#endif
 
     /* In case of standard 4 wires SPI,PI can be kept enabled all time
      * and SCK will only be generated during the write operations. But in case
@@ -119,48 +251,21 @@ void spi_init(spi_t *obj, bool is_slave, PinName mosi, PinName miso, PinName scl
     spiobj->spi = (SPIName)pinmap_merge(spi_module, spi_ssel);
     MBED_ASSERT(spiobj->spi != (SPIName)NC);
 
-#if defined SPI1_BASE
-    // Enable SPI clock
-    if (spiobj->spi == SPI_1) {
-        __HAL_RCC_SPI1_CLK_ENABLE();
-        spiobj->spiIRQ = SPI1_IRQn;
+    uint32_t i = 0;
+    while (i < SPI_COUNT) {
+        if (spiobj->spi == spi_enable_disable[i].name) {
+            spi_enable_disable[i].enable();
+            spiobj->spiIRQ = spi_enable_disable[i].irq_n;
+            break;
+        }
+        i++;
     }
-#endif
 
-#if defined SPI2_BASE
-    if (spiobj->spi == SPI_2) {
-        __HAL_RCC_SPI2_CLK_ENABLE();
-        spiobj->spiIRQ = SPI2_IRQn;
-    }
-#endif
-
-#if defined SPI3_BASE
-    if (spiobj->spi == SPI_3) {
-        __HAL_RCC_SPI3_CLK_ENABLE();
-        spiobj->spiIRQ = SPI3_IRQn;
-    }
-#endif
-
-#if defined SPI4_BASE
-    if (spiobj->spi == SPI_4) {
-        __HAL_RCC_SPI4_CLK_ENABLE();
-        spiobj->spiIRQ = SPI4_IRQn;
-    }
-#endif
-
-#if defined SPI5_BASE
-    if (spiobj->spi == SPI_5) {
-        __HAL_RCC_SPI5_CLK_ENABLE();
-        spiobj->spiIRQ = SPI5_IRQn;
-    }
-#endif
-
-#if defined SPI6_BASE
-    if (spiobj->spi == SPI_6) {
-        __HAL_RCC_SPI6_CLK_ENABLE();
-        spiobj->spiIRQ = SPI6_IRQn;
-    }
-#endif
+    MBED_ASSERT(i < SPI_COUNT);
+    DEBUG_PRINTF("mapping %08x to %lu (%08x)\n", spiobj->spi, i, spi_inst_cache[i].name);
+    MBED_ASSERT(spi_inst_cache[i].name == 0);
+    spi_inst_cache[i].name = spiobj->spi;
+    spi_inst_cache[i].spi = spiobj;
 
     // Configure the SPI pins
     pinmap_pinout(mosi, PinMap_SPI_MOSI);
@@ -181,11 +286,9 @@ void spi_init(spi_t *obj, bool is_slave, PinName mosi, PinName miso, PinName scl
         handle->Init.NSS = SPI_NSS_SOFT;
     }
 
-    handle->Init.Mode = is_slave ? SPI_MODE_SLAVE : SPI_MODE_MASTER;
-
     /* Fill default value */
     handle->Instance = SPI_INST(obj);
-    handle->Init.Mode              = SPI_MODE_MASTER;
+    handle->Init.Mode = is_slave ? SPI_MODE_SLAVE : SPI_MODE_MASTER;
     handle->Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256;
 
     if (miso != NC) {
@@ -210,58 +313,25 @@ void spi_free(spi_t *obj)
     struct spi_s *spiobj = SPI_S(obj);
     SPI_HandleTypeDef *handle = &(spiobj->handle);
 
-    DEBUG_PRINTF("spi_free\r\n");
+    DEBUG_PRINTF("spi_free\n");
 
     __HAL_SPI_DISABLE(handle);
     HAL_SPI_DeInit(handle);
 
-#if defined SPI1_BASE
-    // Reset SPI and disable clock
-    if (spiobj->spi == SPI_1) {
-        __HAL_RCC_SPI1_FORCE_RESET();
-        __HAL_RCC_SPI1_RELEASE_RESET();
-        __HAL_RCC_SPI1_CLK_DISABLE();
-    }
-#endif
-#if defined SPI2_BASE
-    if (spiobj->spi == SPI_2) {
-        __HAL_RCC_SPI2_FORCE_RESET();
-        __HAL_RCC_SPI2_RELEASE_RESET();
-        __HAL_RCC_SPI2_CLK_DISABLE();
-    }
-#endif
 
-#if defined SPI3_BASE
-    if (spiobj->spi == SPI_3) {
-        __HAL_RCC_SPI3_FORCE_RESET();
-        __HAL_RCC_SPI3_RELEASE_RESET();
-        __HAL_RCC_SPI3_CLK_DISABLE();
+    uint32_t idx = 0;
+    while (idx < SPI_COUNT) {
+        if (spiobj->spi == spi_enable_disable[idx].name) {
+            spi_enable_disable[idx].disable();
+            break;
+        }
+        idx++;
     }
-#endif
 
-#if defined SPI4_BASE
-    if (spiobj->spi == SPI_4) {
-        __HAL_RCC_SPI4_FORCE_RESET();
-        __HAL_RCC_SPI4_RELEASE_RESET();
-        __HAL_RCC_SPI4_CLK_DISABLE();
-    }
-#endif
-
-#if defined SPI5_BASE
-    if (spiobj->spi == SPI_5) {
-        __HAL_RCC_SPI5_FORCE_RESET();
-        __HAL_RCC_SPI5_RELEASE_RESET();
-        __HAL_RCC_SPI5_CLK_DISABLE();
-    }
-#endif
-
-#if defined SPI6_BASE
-    if (spiobj->spi == SPI_6) {
-        __HAL_RCC_SPI6_FORCE_RESET();
-        __HAL_RCC_SPI6_RELEASE_RESET();
-        __HAL_RCC_SPI6_CLK_DISABLE();
-    }
-#endif
+    MBED_ASSERT(idx < SPI_COUNT);
+    MBED_ASSERT(spi_inst_cache[idx].spi == spiobj);
+    spi_inst_cache[idx].spi = NULL;
+    spi_inst_cache[idx].name = 0;
 
     // Configure GPIOs
     pin_function(spiobj->pin_miso, STM_PIN_DATA(STM_MODE_INPUT, GPIO_NOPULL, 0));
@@ -277,7 +347,7 @@ void spi_format(spi_t *obj, uint8_t bits, spi_mode_t mode, spi_bit_ordering_t bi
     struct spi_s *spiobj = SPI_S(obj);
     SPI_HandleTypeDef *handle = &(spiobj->handle);
 
-    DEBUG_PRINTF("spi_format, bits:%d, mode:%d, slave?:%d\r\n", bits, mode, slave);
+    DEBUG_PRINTF("spi_format, bits:%d, mode:%d\n", bits, mode);
 
     // Save new values
     handle->Init.DataSize          = (bits == 16) ? SPI_DATASIZE_16BIT : SPI_DATASIZE_8BIT;
@@ -342,24 +412,19 @@ uint32_t spi_frequency(spi_t *obj, uint32_t hz)
 
     /*  In case maximum pre-scaler still gives too high freq, raise an error */
     if (spi_hz > hz) {
-        DEBUG_PRINTF("WARNING: lowest SPI freq (%d)  higher than requested (%d)\r\n", spi_hz, hz);
+        DEBUG_PRINTF("WARNING: lowest SPI freq (%lu)  higher than requested (%lu)\n", spi_hz, hz);
     }
 
-    DEBUG_PRINTF("spi_frequency, request:%d, select:%d\r\n", hz, spi_hz);
+    DEBUG_PRINTF("spi_frequency, request:%lu, select:%lu\n", hz, spi_hz);
 
     init_spi(obj);
 
     return spi_hz;
 }
 
-static uint32_t spi_master_write(spi_t *obj, uint32_t value)
-{
+static uint32_t spi_write(spi_t *obj, uint32_t value) {
     struct spi_s *spiobj = SPI_S(obj);
     SPI_HandleTypeDef *handle = &(spiobj->handle);
-
-    if (handle->Init.Direction == SPI_DIRECTION_1LINE) {
-        return HAL_SPI_Transmit(handle, (uint8_t *)&value, 1, TIMEOUT_1_BYTE);
-    }
 
 #if defined(LL_SPI_RX_FIFO_TH_HALF)
     /*  Configure the default data size */
@@ -388,11 +453,13 @@ static uint32_t spi_master_write(spi_t *obj, uint32_t value)
     /* Then wait RXE flag before reading */
     while (!LL_SPI_IsActiveFlag_RXNE(SPI_INST(obj)));
 
+    uint32_t out = 0;
     if (handle->Init.DataSize == SPI_DATASIZE_16BIT) {
-        return LL_SPI_ReceiveData16(SPI_INST(obj));
+        out = LL_SPI_ReceiveData16(SPI_INST(obj));
     } else {
-        return LL_SPI_ReceiveData8(SPI_INST(obj));
+        out = LL_SPI_ReceiveData8(SPI_INST(obj));
     }
+    return out;
 }
 
 uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
@@ -406,7 +473,7 @@ uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
         for (i = 0; i < total; i++) {
             // FIXME: handle various data size
             uint32_t out = (i < tx_length) ? ((uint8_t *)tx_buffer)[i] : *(uint8_t *)write_fill;
-            uint32_t in = spi_master_write(obj, out);
+            uint32_t in = spi_write(obj, out);
             if (i < rx_length) {
                 ((uint8_t*)rx_buffer)[i] = (uint8_t)in;
             }
@@ -439,9 +506,8 @@ typedef enum {
     SPI_TRANSFER_TYPE_TXRX = 3,
 } transfer_type_t;
 
-
 /// @returns the number of bytes transferred, or `0` if nothing transferred
-static int spi_master_start_asynch_transfer(spi_t *obj, transfer_type_t transfer_type, const void *tx, void *rx, size_t length)
+static void spi_master_start_asynch_transfer(spi_t *obj, transfer_type_t transfer_type, const void *tx, void *rx, size_t length, const void *fill_symbol)
 {
     struct spi_s *spiobj = SPI_S(obj);
     SPI_HandleTypeDef *handle = &(spiobj->handle);
@@ -450,9 +516,9 @@ static int spi_master_start_asynch_transfer(spi_t *obj, transfer_type_t transfer
     // so for 16 bit transfer width the count needs to be halved
     size_t words;
 
-    DEBUG_PRINTF("SPI inst=0x%8X Start: %u, %u\r\n", (int)handle->Instance, transfer_type, length);
+    DEBUG_PRINTF("SPI inst=0x%8X Start: %u, %u\n", (int)handle->Instance, transfer_type, length);
 
-    obj->spi.transfer_type = transfer_type;
+    obj->transfer_type = transfer_type;
 
     if (is16bit) {
         words = length / 2;
@@ -462,8 +528,6 @@ static int spi_master_start_asynch_transfer(spi_t *obj, transfer_type_t transfer
 
     // enable the interrupt
     IRQn_Type irq_n = spiobj->spiIRQ;
-    NVIC_DisableIRQ(irq_n);
-    NVIC_ClearPendingIRQ(irq_n);
     NVIC_SetPriority(irq_n, 1);
     NVIC_EnableIRQ(irq_n);
 
@@ -484,7 +548,7 @@ static int spi_master_start_asynch_transfer(spi_t *obj, transfer_type_t transfer
         case SPI_TRANSFER_TYPE_RX:
             // the receive function also "transmits" the receive buffer so in order
             // to guarantee that 0xff is on the line, we explicitly memset it here
-            memset(rx, SPI_FILL_WORD, length);
+            memset(rx, *(uint8_t*)fill_symbol, length);
             rc = HAL_SPI_Receive_IT(handle, (uint8_t *)rx, words);
             break;
         default:
@@ -493,14 +557,57 @@ static int spi_master_start_asynch_transfer(spi_t *obj, transfer_type_t transfer
 
     if (rc) {
         DEBUG_PRINTF("SPI: RC=%u\n", rc);
-        length = 0;
+    }
+}
+
+static void spi_irq_handler(void)
+{
+    // resolve irq id from isr
+    uint8_t active_isr = ((SCB->ICSR) & SCB_ICSR_VECTACTIVE_Msk) - 16;
+    uint32_t idx = 0;
+    while (idx < SPI_COUNT) {
+        if (active_isr == spi_enable_disable[idx].irq_n) {
+            break;
+        }
+        idx++;
     }
 
-    return length;
+    MBED_ASSERT(idx < SPI_COUNT);
+    spi_t *obj = spi_inst_cache[idx].spi;
+    MBED_ASSERT(obj != NULL);
+
+
+    // call the CubeF4 handler, this will update the handle
+    HAL_SPI_IRQHandler(&obj->handle);
+
+    if (obj->handle.State == HAL_SPI_STATE_READY) {
+        // When HAL SPI is back to READY state, check if there was an error
+        int error = obj->handle.ErrorCode;
+#ifndef MAX
+        // quick & dirty max impl
+#define MAX(a, b) ((a>b)?(a):(b))
+#endif
+        spi_async_event_t event = {
+            .transfered = MAX(obj->handle.TxXferSize, obj->handle.RxXferSize),
+            .error = (error != HAL_SPI_ERROR_NONE)
+        };
+        spi_async_handler_f handler = obj->handler;
+        void *ctx = obj->ctx;
+
+        handler(obj, ctx, &event);
+
+        obj->handler = NULL;
+        obj->ctx = NULL;
+
+        // enable the interrupt
+        NVIC_DisableIRQ(obj->spiIRQ);
+        NVIC_ClearPendingIRQ(obj->spiIRQ);
+    }
 }
 
 // asynchronous API
-void spi_master_transfer(spi_t *obj, const void *tx, size_t tx_length, void *rx, size_t rx_length, uint8_t bit_width, uint32_t handler, uint32_t event, DMAUsage hint)
+bool spi_transfer_async(spi_t *obj, const void *tx, uint32_t tx_length, void *rx, uint32_t rx_length,
+        const void *fill_symbol, spi_async_handler_f handler, void *ctx, DMAUsage hint)
 {
     struct spi_s *spiobj = SPI_S(obj);
     SPI_HandleTypeDef *handle = &(spiobj->handle);
@@ -515,7 +622,7 @@ void spi_master_transfer(spi_t *obj, const void *tx, size_t tx_length, void *rx,
 
     // don't do anything, if the buffers aren't valid
     if (!use_tx && !use_rx) {
-        return;
+        return false;
     }
 
     // copy the buffers to the SPI object
@@ -529,79 +636,30 @@ void spi_master_transfer(spi_t *obj, const void *tx, size_t tx_length, void *rx,
     obj->rx_buff.pos = 0;
     obj->rx_buff.width = obj->tx_buff.width;
 
-    obj->spi.event = event;
+    obj->handler = handler;
+    obj->ctx = ctx;
 
-    DEBUG_PRINTF("SPI: Transfer: %u, %u\n", tx_length, rx_length);
-
-    // register the thunking handler
-    IRQn_Type irq_n = spiobj->spiIRQ;
-    NVIC_SetVector(irq_n, (uint32_t)handler);
+    DEBUG_PRINTF("SPI: Transfer: %lu, %lu\n", tx_length, rx_length);
 
     // enable the right hal transfer
     if (use_tx && use_rx) {
         // we cannot manage different rx / tx sizes, let's use smaller one
         size_t size = (tx_length < rx_length) ? tx_length : rx_length;
         if (tx_length != rx_length) {
-            DEBUG_PRINTF("SPI: Full duplex transfer only 1 size: %d\n", size);
+            DEBUG_PRINTF("SPI: Full duplex transfer only 1 size: %u\n", size);
             obj->tx_buff.length = size;
             obj->rx_buff.length = size;
         }
-        spi_master_start_asynch_transfer(obj, SPI_TRANSFER_TYPE_TXRX, tx, rx, size);
+        spi_master_start_asynch_transfer(obj, SPI_TRANSFER_TYPE_TXRX, tx, rx, size, fill_symbol);
     } else if (use_tx) {
-        spi_master_start_asynch_transfer(obj, SPI_TRANSFER_TYPE_TX, tx, NULL, tx_length);
+        spi_master_start_asynch_transfer(obj, SPI_TRANSFER_TYPE_TX, tx, NULL, tx_length, fill_symbol);
     } else if (use_rx) {
-        spi_master_start_asynch_transfer(obj, SPI_TRANSFER_TYPE_RX, NULL, rx, rx_length);
+        spi_master_start_asynch_transfer(obj, SPI_TRANSFER_TYPE_RX, NULL, rx, rx_length, fill_symbol);
     }
+    return true;
 }
 
-inline uint32_t spi_irq_handler_asynch(spi_t *obj)
-{
-    int event = 0;
-
-    // call the CubeF4 handler, this will update the handle
-    HAL_SPI_IRQHandler(&obj->spi.handle);
-
-    if (obj->spi.handle.State == HAL_SPI_STATE_READY) {
-        // When HAL SPI is back to READY state, check if there was an error
-        int error = obj->spi.handle.ErrorCode;
-        if (error != HAL_SPI_ERROR_NONE) {
-            // something went wrong and the transfer has definitely completed
-            event = SPI_EVENT_ERROR | SPI_EVENT_INTERNAL_TRANSFER_COMPLETE;
-
-            if (error & HAL_SPI_ERROR_OVR) {
-                // buffer overrun
-                event |= SPI_EVENT_RX_OVERFLOW;
-            }
-        } else {
-            // else we're done
-            event = SPI_EVENT_COMPLETE | SPI_EVENT_INTERNAL_TRANSFER_COMPLETE;
-        }
-        // enable the interrupt
-        NVIC_DisableIRQ(obj->spi.spiIRQ);
-        NVIC_ClearPendingIRQ(obj->spi.spiIRQ);
-    }
-
-
-    return (event & (obj->spi.event | SPI_EVENT_INTERNAL_TRANSFER_COMPLETE));
-}
-
-uint8_t spi_active(spi_t *obj)
-{
-    struct spi_s *spiobj = SPI_S(obj);
-    SPI_HandleTypeDef *handle = &(spiobj->handle);
-    HAL_SPI_StateTypeDef state = HAL_SPI_GetState(handle);
-
-    switch (state) {
-        case HAL_SPI_STATE_RESET:
-        case HAL_SPI_STATE_READY:
-        case HAL_SPI_STATE_ERROR:
-            return 0;
-        default:
-            return 1;
-    }
-}
-
-void spi_abort_asynch(spi_t *obj)
+void spi_transfer_async_abort(spi_t *obj)
 {
     struct spi_s *spiobj = SPI_S(obj);
     SPI_HandleTypeDef *handle = &(spiobj->handle);

@@ -22,6 +22,7 @@
 #include "PinNames.h"
 #if DEVICE_SPI_ASYNCH
 #include "fsl_dspi_edma.h"
+#include "spi_api.h"
 #endif
 #if DEVICE_SERIAL_ASYNCH
 #include "fsl_uart_edma.h"
@@ -73,7 +74,8 @@ struct i2c_s {
 struct spi_s {
     uint32_t instance;
     uint8_t bits;
-    bool slave;
+    bool is_slave;
+    spi_bit_ordering_t order;
 #if DEVICE_SPI_ASYNCH
     status_t status;
     dspi_master_handle_t spi_master_handle;

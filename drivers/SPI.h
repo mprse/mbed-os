@@ -25,7 +25,7 @@
 #include "platform/SingletonPtr.h"
 #include "platform/NonCopyable.h"
 
-#if DEVICE_SPI_ASYNCH
+#if 0
 #include "platform/CThunk.h"
 #include "hal/dma_api.h"
 #include "platform/CircularBuffer.h"
@@ -77,7 +77,13 @@ namespace mbed {
  * @ingroup drivers
  */
 class SPI : private NonCopyable<SPI> {
-
+protected:
+    struct spi_peripheral_s {
+        SPIName name;
+        spi_t spi;
+        PlatformMutex *mutex;
+        SPI *owner;
+    };
 public:
     /** Create a SPI master connected to the specified pins
      *
@@ -167,8 +173,9 @@ private:
      * Implemented in order to avoid duplicate locking and boost performance
      */
     uint32_t _acquire(void);
+    static spi_peripheral_s *lookup(SPIName name, bool or_last = false);
 
-#if DEVICE_SPI_ASYNCH
+#if 0
 public:
 
     /** Start non-blocking SPI transfer using 8bit buffers.
@@ -289,20 +296,13 @@ private:
 #endif // DEVICE_SPI_ASYNCH
 
 protected:
-    struct spi_peripheral_s {
-        SPIName name;
-        spi_t spi;
-        PlatformMutex *mutex;
-        SPI *owner = NULL;
-    };
     // holds spi_peripheral_s per peripheral on the device.
     // Drawback: it costs ram size even if the device is not used.
     static spi_peripheral_s _peripherals[SPI_COUNT];
 
-    uint32_t _id;
     spi_peripheral_s *_self;
 
-#if DEVICE_SPI_ASYNCH
+#if 0
     CThunk<SPI> _irq;
     event_callback_t _callback;
     DMAUsage _usage;
@@ -319,6 +319,6 @@ protected:
 
 } // namespace mbed
 
-#endif
+#endif // DEVICE_SPI || DOXYGEN_ONLY
 
-#endif
+#endif // MBED_SPI_H

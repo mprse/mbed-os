@@ -16,7 +16,7 @@
 #include "drivers/SPI.h"
 #include "platform/mbed_critical.h"
 
-#if DEVICE_SPI_ASYNCH
+#if 0
 #include "platform/mbed_power_mgmt.h"
 #endif
 
@@ -24,15 +24,14 @@
 
 namespace mbed {
 
-#if DEVICE_SPI_ASYNCH && TRANSACTION_QUEUE_SIZE_SPI
+#if 0 && TRANSACTION_QUEUE_SIZE_SPI
 CircularBuffer<Transaction<SPI>, TRANSACTION_QUEUE_SIZE_SPI> SPI::_transaction_buffer;
 #endif
 SPI::spi_peripheral_s SPI::_peripherals[SPI_COUNT];
 
 SPI::SPI(PinName mosi, PinName miso, PinName sclk, PinName ssel) :
-    _id(),
     _self(),
-#if DEVICE_SPI_ASYNCH
+#if 0
     _usage(DMA_USAGE_NEVER),
     _deep_sleep_locked(false),
 #endif
@@ -53,19 +52,12 @@ SPI::SPI(PinName mosi, PinName miso, PinName sclk, PinName ssel) :
 
     core_util_critical_section_enter();
     // lookup in a critical section if we already have it else initialize it
-    for (; _id < SPI_COUNT; _id++) {
-        if ((_peripherals[_id].name == name) ||
-            (_peripherals[_id].name == 0)) {
-            _self = &_peripherals[_id];
-            break;
-        }
-    }
+    _self = SPI::lookup(name, true);
     if (_self->mutex == NULL) {
         _self->mutex = mutex;
     }
     if (_self->name == 0) {
         _self->name = name;
-        // XXX: we may want to ensure that it was previously initialized with the same mosi/miso/sclk/ss pins
         spi_init(&_self->spi, false, mosi, miso, sclk, NC);
     }
     core_util_critical_section_exit();
@@ -76,6 +68,27 @@ SPI::SPI(PinName mosi, PinName miso, PinName sclk, PinName ssel) :
 
     // we don't need to _acquire at this stage.
     // this will be done anyway before any operation.
+}
+
+struct SPI::spi_peripheral_s *SPI::lookup(SPIName name, bool or_last) {
+    struct SPI::spi_peripheral_s *result = NULL;
+    core_util_critical_section_enter();
+    for (uint32_t idx = 0; idx < SPI_COUNT; idx++) {
+        printf("SPI::lookup(%08x) found at %lu", name, idx);
+        if ((_peripherals[idx].name == name) ||
+            (_peripherals[idx].name == 0)) {
+            printf("SPI::lookup(%08x) found at %lu", name, idx);
+            result = &_peripherals[idx];
+            break;
+        }
+        // XXX: we may want to ensure that it was previously initialized with the same mosi/miso/sclk/ss pins
+    }
+    if (!or_last && (result != NULL) && (result->name == 0)) {
+        result = NULL;
+    }
+
+    core_util_critical_section_exit();
+    return result;
 }
 
 void SPI::format(int bits, int mode)
@@ -176,7 +189,7 @@ void SPI::set_default_write_value(char data)
     unlock();
 }
 
-#if DEVICE_SPI_ASYNCH
+#if 0
 
 int SPI::transfer(const void *tx_buffer, int tx_length, void *rx_buffer, int rx_length, unsigned char bit_width, const event_callback_t &callback, int event)
 {
