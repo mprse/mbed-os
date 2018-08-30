@@ -67,7 +67,7 @@ In order to provide a meaningful API, this RFC will consider the following use c
 | `spi_format(spi, bits, mode, slave)` | `spi_format(spi, bits, mode, slave, bit_ordering)` | Add the bit ordering as requested by [#4789](https://github.com/ARMmbed/mbed-os/issues/4789)
 | `spi_format(..., int bits, ...)` | `spi_format(..., uint8_t bits, ...)` | `bits` becomes an unsigned 8 bits integer as the value is in the range \[1; 32].
 | `spi_format(..., int mode, ...)` | `spi_format(..., spi_mode_t mode, ...)` | SPI mode becomes an enum to sanitize the "magic integer"
-| `spi_format(..., int slave, ...)` | `spi_init(..., bool is_slave, ...)` | `slave` becomes a boolean called `is_slave` as it is only a binary value.</br>This argument is also moved to `spi_init()` because it is required to determine if `SS` should be ignored or not.
+| `spi_format(..., int slave, ...)` | `spi_init(..., bool is_slave, ...)` | `slave` becomes a boolean called `is_slave` as it is only a binary value.</br>This argument is also moved to `spi_init()` because it is required to determine if `ssel` should be ignored or not.
 | `spi_frequency(..., int hz)` | `spi_frequency(..., uint32_t hz)` | `hz` becomes unsigned as a negative does not make sense in this context.
 | ̀`void spi_frequency(...)` | `uint32_t spi_frequency(...)` | ̀`spi_frequency()` now returns the actual frequency that the peripheral will be generating to allow a user adjust its strategy in case the target cannot be reached.
 | `uint8_t spi_get_module(spi_t *)` | `SPIName spi_get_module(spi_pin_t *)` | This change will ease tracking of SPI instanced by using a know unique identifier for each peripheral.</br>This will be used by the Driver to Identify the various peripheral and allow multiple SPI transfer on different SPI peripherals.</br>The type change allows to call `spi_get_module()` before calling `spi_init()`
@@ -104,7 +104,8 @@ typedef struct {
      * the value should be 0x8000F880.
      */
     uint32_t    word_length;
-    bool        support_slave_mode; /**< If true, the device can handle SPI slave mode. */
+    bool        support_slave_mode; /**< If true, the device can handle SPI slave mode using hardware management on the specified ssel pin. */
+    bool        half_duplex; /**< If true, the device also supports SPI transmissions using only 3 wires. */
 } spi_capabilities_t;
 
 typedef enum _spi_mode_t {
@@ -121,10 +122,16 @@ typedef enum _spi_bit_ordering_t {
 
 typedef void (*spi_async_handler_f)(spi_t *obj, void *ctx, spi_async_event_t event);
 
-SPIName spi_get_module(PINName MISO, PINName MOSI, PINName MCLK);
-void spi_get_capabilities(SPIName name, PINName SS, spi_capabilities_t *cap);
+/**
+ * Returns a variant of the SPIName enum uniquely identifying a SPI peripheral of the device.
+ */
+SPIName spi_get_module(PinName mosi, PinName miso, PinName mclk);
+/**
+ * Fills the given spi_capabilities_t structure with the capabilities of the given peripheral.
+ */
+void spi_get_capabilities(SPIName name, PinName ssel, spi_capabilities_t *cap);
 
-void spi_init(spi_t *obj, bool is_slave, PINName MISO, PINName MOSI, PINName MCLK, PINName SS);
+void spi_init(spi_t *obj, bool is_slave, PinName mosi, PinName miso, PinName mclk, PinName ssel);
 void spi_format(spi_t *obj, uint8_t bits, spi_mode_t mode, spi_bit_ordering_t bit_ordering);
 uint32_t spi_frequency(spi_t *obj, uint32_t hz);
 void spi_transfer(spi_t *obj, const void *tx, uint32_t tx_len, void *rx, uint32_t rx_len, const void *fill_symbol);
@@ -138,17 +145,17 @@ void spi_free(spi_t *obj);
 
 - `spi_get_module()` returns the `SPIName` unique identifier to the peripheral associated to this SPI channel.
 - `spi_get_capabilities()` fills the given `spi_capabilities_t` instance
-- `spi_get_capabilities()` should consider the `SS` pin when evaluation the `support_slave_mode` capability.  
-  If the given `SS` pin cannot be managed by hardware in slave mode, `support_slave_mode` should be false.
+- `spi_get_capabilities()` should consider the `ssel` pin when evaluation the `support_slave_mode` capability.  
+  If the given `ssel` pin cannot be managed by hardware in slave mode, `support_slave_mode` should be false.
 - At least a symbol width of 8bit must be supported.
 - The supported frequency range must include the range [0.2..2] MHz.
 - The shortest part of the duty cycle must not be shorter than 50% of the expected period.
 - `spi_init()` initializes the pins leaving the configuration registers unchanged.
 - `spi_init()` if `is_slave` is false:
-    - if `SS` is `NC` the hal implementation ignores this pin.
-    - if `SS` is not `NC` then the hal implementation owns the pin and its management.
-- When managed by the hal implementation, `SS` is always considered active low.
-- If `miso` (exclusive) or `mosi` is missing in any function that expects pins, the bus is assumed to be half-duplex.
+    - if `ssel` is `NC` the hal implementation ignores this pin.
+    - if `ssel` is not `NC` then the hal implementation owns the pin and its management.
+- When managed by the hal implementation, `ssel` is always considered active low.
+- When the hardware supports the half-duplex (3-wire) mode, if `miso` (exclusive) or `mosi` is missing in any function that expects pins, the bus is assumed to be half-duplex.
 - `spi_free()` resets the pins to their default state.
 - `spi_free()` disables the peripheral clock.
 - `spi_format()` sets :
@@ -180,7 +187,7 @@ void spi_free(spi_t *obj);
   - In Half-duplex mode :
     - as master, `spi_transfer()` sends `tx_len` symbols and then reads `rx_len` symbols.
     - as slave, `spi_transfer()` receives `rx_len` symbols and then sends `tx_len` symbols.
-- `spi_transter_async()` schedules a transfer to be process the same way ̀`spi_transfer()` would have but asynchronously.
+- `spi_transter_async()` schedules a transfer to be process the same way `spi_transfer()` would have but asynchronously.
 - `spi_transter_async()` returns immediately with a boolean indicating whether the transfer was successfully scheduled or not.
 - The callback given to `spi_transfer_async()` is invoked when the transfer completes (with a success or an error).
 - `spi_transfer_async_abort()` aborts an on-going async transfer.
@@ -188,15 +195,16 @@ void spi_free(spi_t *obj);
 ### Undefined Behaviours
 - Calling `spi_init()` multiple times on the same `spi_t` without `spi_free()`'ing it first.
 - Calling any method other than `spi_init()` on a non-initialized or freed `spi_t`.
-- Passing both MISO and MOSI as NC to `spi_get_module` or `spi_init`.
-  Only one may be set as NC for simplex/half-duplex configuration.
-- Passing SCLK as NC  to `spi_get_module` or `spi_init`.
+- Passing both `miso` and `mosi` as `NC` to `spi_get_module` or `spi_init`.
+- Passing `miso` or `mosi` as `NC` on target that does not support half-duplex mode.
+- Passing `mclk` as `NC`  to `spi_get_module` or `spi_init`.
 - Passing an invalid pointer as `cap` to `spi_get_capabilities`.
 - Passing pins that cannot be on the same peripheral.
 - Passing an invalid pointer as `obj` to any method.
-- Giving a `SS` pin to `spi_init()` when using in master mode.  
+- Giving a `ssel` pin to `spi_init()` when using in master mode.  
   SS must be managed by hardware in slave mode and must **NOT** be managed by hardware in master mode.
 - Setting a frequency outside of the range given by `spi_get_capabilities()`.
+- Setting a frequency in slave mode.
 - Setting `bits` in `spi_format` to a value out of the range given by `spi_get_capabilities()`.
 - Passing an invalid pointer as `fill_symbol` to `spi_transfer` and `spi_transfer_async` while they would be required by the transfer (`rx_len != tx_len` or `tx==NULL`).
 - Passing an invalid pointer as `handler` to `spi_transfer_async`.
