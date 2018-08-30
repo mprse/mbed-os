@@ -181,11 +181,9 @@ void spi_init(spi_t *obj, bool is_slave, PinName mosi, PinName miso, PinName scl
         handle->Init.NSS = SPI_NSS_SOFT;
     }
 
-    handle->Init.Mode = is_slave ? SPI_MODE_SLAVE : SPI_MODE_MASTER;
-
     /* Fill default value */
     handle->Instance = SPI_INST(obj);
-    handle->Init.Mode              = SPI_MODE_MASTER;
+    handle->Init.Mode = is_slave ? SPI_MODE_SLAVE : SPI_MODE_MASTER;
     handle->Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256;
 
     if (miso != NC) {
@@ -352,14 +350,9 @@ uint32_t spi_frequency(spi_t *obj, uint32_t hz)
     return spi_hz;
 }
 
-static uint32_t spi_master_write(spi_t *obj, uint32_t value)
-{
+static uint32_t spi_write(spi_t *obj, uint32_t value) {
     struct spi_s *spiobj = SPI_S(obj);
     SPI_HandleTypeDef *handle = &(spiobj->handle);
-
-    if (handle->Init.Direction == SPI_DIRECTION_1LINE) {
-        return HAL_SPI_Transmit(handle, (uint8_t *)&value, 1, TIMEOUT_1_BYTE);
-    }
 
 #if defined(LL_SPI_RX_FIFO_TH_HALF)
     /*  Configure the default data size */
@@ -388,11 +381,13 @@ static uint32_t spi_master_write(spi_t *obj, uint32_t value)
     /* Then wait RXE flag before reading */
     while (!LL_SPI_IsActiveFlag_RXNE(SPI_INST(obj)));
 
+    uint32_t out = 0;
     if (handle->Init.DataSize == SPI_DATASIZE_16BIT) {
-        return LL_SPI_ReceiveData16(SPI_INST(obj));
+        out = LL_SPI_ReceiveData16(SPI_INST(obj));
     } else {
-        return LL_SPI_ReceiveData8(SPI_INST(obj));
+        out = LL_SPI_ReceiveData8(SPI_INST(obj));
     }
+    return out;
 }
 
 uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
@@ -406,7 +401,7 @@ uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
         for (i = 0; i < total; i++) {
             // FIXME: handle various data size
             uint32_t out = (i < tx_length) ? ((uint8_t *)tx_buffer)[i] : *(uint8_t *)write_fill;
-            uint32_t in = spi_master_write(obj, out);
+            uint32_t in = spi_write(obj, out);
             if (i < rx_length) {
                 ((uint8_t*)rx_buffer)[i] = (uint8_t)in;
             }
