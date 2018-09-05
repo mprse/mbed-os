@@ -32,7 +32,7 @@
 #include "mbed_debug.h"
 #include "spi_api.h"
 
-#if DEVICE_SPI
+#if 1
 #include <stdbool.h>
 #include <math.h>
 #include <string.h>
@@ -101,6 +101,11 @@ SPIName spi_get_module(PinName mosi, PinName miso, PinName sclk) {
     SPIName spi_data = (SPIName)pinmap_merge(spi_mosi, spi_miso);
 
     return (SPIName)pinmap_merge(spi_data, spi_sclk);
+}
+
+void spi_get_capabilities(SPIName name, PinName ssel, spi_capabilities_t *cap)
+{
+    cap->word_length = (1<<7);
 }
 
 void spi_init(spi_t *obj, bool is_slave, PinName mosi, PinName miso, PinName sclk, PinName ssel)
@@ -401,6 +406,8 @@ uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
         for (i = 0; i < total; i++) {
             // FIXME: handle various data size
             uint32_t out = (i < tx_length) ? ((uint8_t *)tx_buffer)[i] : *(uint8_t *)write_fill;
+            //printf("---> %u \n", out);
+
             uint32_t in = spi_write(obj, out);
             if (i < rx_length) {
                 ((uint8_t*)rx_buffer)[i] = (uint8_t)in;
