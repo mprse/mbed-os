@@ -105,7 +105,10 @@ SPIName spi_get_module(PinName mosi, PinName miso, PinName sclk) {
 
 void spi_get_capabilities(SPIName name, PinName ssel, spi_capabilities_t *cap)
 {
-    cap->word_length = (1<<7);
+    cap->word_length = (1<<7 | 1<<15);
+
+    cap->minimum_frequency = 200000;
+    cap->maximum_frequency = 2000000;
 }
 
 void spi_init(spi_t *obj, bool is_slave, PinName mosi, PinName miso, PinName sclk, PinName ssel)

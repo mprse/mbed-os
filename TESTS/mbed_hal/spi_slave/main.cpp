@@ -119,6 +119,16 @@ typedef struct {
 static config_test_case_t test_cases[] = {
         /* default config */
 /* 00 */{8, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
+/* 00 */{8, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
+/* 00 */{8, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
+/* 00 */{8, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
+/* 00 */{8, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
+/* 00 */{8, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
+/* 00 */{8, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
+/* 00 */{8, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
+/* 00 */{8, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
+/* 00 */{8, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
+
         /* symbol size testing */
 /* 01 */{0, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
 /* 02 */{1, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
@@ -140,7 +150,27 @@ static config_test_case_t test_cases[] = {
 /* 15 */{8, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_LSB_FIRST, FREQ_2MHZ},
 };
 
-int main_x()
+
+static void init_buffers(uint32_t symbol_size)
+{
+    if (symbol_size <= 8) {
+        p_tx_buf = s_tx_buff_uint8;
+        p_rx_buf = s_rx_buff_uint8;
+        p_fill_sym = (void*) &fill_symbol_8;
+        memcpy(s_tx_buff_uint8, tx_pattern_8, sizeof(s_tx_buff_uint8));
+    } else if (symbol_size <= 16) {
+        p_tx_buf = s_tx_buff_uint16;
+        p_rx_buf = s_rx_buff_uint16;
+        p_fill_sym = (void*) &fill_symbol_16;
+    } else {
+        p_tx_buf = s_tx_buff_uint32;
+        p_rx_buf = s_rx_buff_uint32;
+        p_fill_sym = (void*) &fill_symbol_32;
+    }
+
+}
+
+int main()
 {
     int32_t count;
     int8_t status;
@@ -158,32 +188,96 @@ int main_x()
     spi_init(&spi_slave, true, SPI_SLAVE_MOSI, SPI_SLAVE_MISO, SPI_SLAVE_CLK, SPI_SLAVE_SS);
 
     while (true) {
-        wait_ms(10);
-
         spi_format(&spi_slave, 8, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST);
 
         spi_transmission_config_t config = {0};
 
-        printf("1 \r\n");
+//        printf("1 \r\n");
         count = spi_transfer(&spi_slave, NULL, 0, &config, CONFIG_LEN, (void*)&fill_symbol_8);
-/*
+
         printf("config preamble: %u\r\n", (uint32_t)config.preamble);
         printf("config symbol_size: %u\r\n", (uint32_t)config.symbol_size);
         printf("config spi_mode: %u\r\n", (uint32_t)config.spi_mode);
         printf("config bit_ordering: %u\r\n", (uint32_t)config.bit_ordering);
         printf("config freq: %u\r\n", (uint32_t)config.freq);
-*/
-        if (capabilities.word_length & ((uint32_t)1 << ((uint32_t)config.symbol_size - 1))) {
+        printf("---\n");
+
+        if (capabilities.word_length & ((uint32_t)1 << ((uint32_t)config.symbol_size - 1)) &&
+            config.freq >= capabilities.minimum_frequency &&
+            config.freq <= capabilities.maximum_frequency) {
 
             //printf("sending ok status\r\n");
 
             status = 0x00;
-            printf("2 \r\n");
+
             count = spi_transfer(&spi_slave, &status, CONFIG_STATUS_LEN, s_rx_buff_uint8, 1, (void*) &fill_symbol_8);
 
-            //printf("status sent\r\n");
-
             spi_format(&spi_slave, config.symbol_size, (spi_mode_t)config.spi_mode, (spi_bit_ordering_t)config.bit_ordering);
+
+            /* Test 1: RX == TX (send 5 symbols, read 5 symbols). */
+
+            init_buffers(config.symbol_size);
+
+//            printf("3 \r\n");
+            count = spi_transfer(&spi_slave, p_tx_buf, TEST_SYM_CNT, p_rx_buf, TEST_SYM_CNT, (void*) p_fill_sym);
+
+            /* Send data received from master in the previous transmission. */
+
+            if (config.symbol_size <= 8) {
+                memcpy(p_tx_buf, p_rx_buf, sizeof(s_tx_buff_uint8));
+            } else if (config.symbol_size <= 16) {
+                memcpy(p_tx_buf, p_rx_buf, sizeof(s_tx_buff_uint16));
+            } else {
+                memcpy(p_tx_buf, p_rx_buf, sizeof(s_tx_buff_uint32));
+            }
+            //printf("4 \r\n");
+            count = spi_transfer(&spi_slave, p_tx_buf, TEST_SYM_CNT, p_rx_buf, TEST_SYM_CNT, (void*) p_fill_sym);
+
+            /* Test 2: Master: TX > RX (send 3 symbols, receive 5 symbols). */
+
+            init_buffers(config.symbol_size);
+
+            count = spi_transfer(&spi_slave, p_tx_buf, TEST_SYM_CNT, p_rx_buf, TEST_SYM_CNT, (void*) p_fill_sym);
+
+            /* Send data received from master in the previous transmission. */
+
+            if (config.symbol_size <= 8) {
+                memcpy(p_tx_buf, p_rx_buf, sizeof(s_tx_buff_uint8));
+            } else if (config.symbol_size <= 16) {
+                memcpy(p_tx_buf, p_rx_buf, sizeof(s_tx_buff_uint16));
+            } else {
+                memcpy(p_tx_buf, p_rx_buf, sizeof(s_tx_buff_uint32));
+            }
+
+            //printf("RX: 0x%X 0x%X 0x%X 0x%X 0x%X \n", s_rx_buff_uint8[0], s_rx_buff_uint8[1], s_rx_buff_uint8[2], s_rx_buff_uint8[3], s_rx_buff_uint8[4]);
+
+            count = spi_transfer(&spi_slave, p_tx_buf, TEST_SYM_CNT, p_rx_buf, TEST_SYM_CNT, (void*) p_fill_sym);
+
+            /* Test 2: Master: TX > RX (send 3 symbols, receive 5 symbols). */
+
+            init_buffers(config.symbol_size);
+
+            count = spi_transfer(&spi_slave, p_tx_buf, TEST_SYM_CNT, p_rx_buf, TEST_SYM_CNT, (void*) p_fill_sym);
+
+            /* Send data received from master in the previous transmission. */
+
+            if (config.symbol_size <= 8) {
+                memcpy(p_tx_buf, p_rx_buf, sizeof(s_tx_buff_uint8));
+            } else if (config.symbol_size <= 16) {
+                memcpy(p_tx_buf, p_rx_buf, sizeof(s_tx_buff_uint16));
+            } else {
+                memcpy(p_tx_buf, p_rx_buf, sizeof(s_tx_buff_uint32));
+            }
+
+            //printf("RX: 0x%X 0x%X 0x%X 0x%X 0x%X \n", s_rx_buff_uint8[0], s_rx_buff_uint8[1], s_rx_buff_uint8[2], s_rx_buff_uint8[3], s_rx_buff_uint8[4]);
+
+            count = spi_transfer(&spi_slave, p_tx_buf, TEST_SYM_CNT, p_rx_buf, TEST_SYM_CNT, (void*) p_fill_sym);
+
+        } else {
+            //printf("sending not supported status:\r\n");
+            status = 0x01;
+//            printf("5 \r\n");
+            count = spi_transfer(&spi_slave, &status, CONFIG_STATUS_LEN, NULL, 0, (void*) &fill_symbol_8);
 
             if (config.symbol_size <= 8) {
                 p_tx_buf = s_tx_buff_uint8;
@@ -199,35 +293,15 @@ int main_x()
                 p_rx_buf = s_rx_buff_uint32;
                 p_fill_sym = (void*) &fill_symbol_32;
             }
-            printf("3 \r\n");
+
             count = spi_transfer(&spi_slave, p_tx_buf, TEST_SYM_CNT, p_rx_buf, TEST_SYM_CNT, (void*) p_fill_sym);
-
-            //printf("transfer 1 done\r\n");
-
-            if (config.symbol_size <= 8) {
-                memcpy(p_tx_buf, p_rx_buf, sizeof(s_tx_buff_uint8));
-            } else if (config.symbol_size <= 16) {
-                memcpy(p_tx_buf, p_rx_buf, sizeof(s_tx_buff_uint16));
-            } else {
-                memcpy(p_tx_buf, p_rx_buf, sizeof(s_tx_buff_uint32));
-            }
-            printf("4 \r\n");
-            count = spi_transfer(&spi_slave, p_tx_buf, TEST_SYM_CNT, p_rx_buf, TEST_SYM_CNT, (void*) p_fill_sym);
-
-            //printf("transfer 2 done\r\n");
-
-        } else {
-            //printf("sending not supported status:\r\n");
-            status = 0x01;
-            printf("5 \r\n");
-            count = spi_transfer(&spi_slave, &status, CONFIG_STATUS_LEN, NULL, 0, (void*) &fill_symbol_8);
         }
     }
 
     spi_free(&spi_slave);
 }
 
-int main()
+int main_single()
 {
     int32_t count;
     int8_t status;
