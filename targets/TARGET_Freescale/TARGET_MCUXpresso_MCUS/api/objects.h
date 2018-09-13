@@ -114,6 +114,7 @@ struct spi_s {
             dspi_slave_handle_t handle;
             spi_transfer_t xfer;
             uint8_t buffer[FSL_SPI_SLAVE_BUFFER_SZ]; /*!< used when dealing with lsb first */
+            void *reverse;
         } slave;
     } u;
 
