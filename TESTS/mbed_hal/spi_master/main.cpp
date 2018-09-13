@@ -50,7 +50,8 @@ using namespace utest::v1;
 #define FREQ_MIN    (0)
 #define FREQ_MAX    (0xFFFFFFFF)
 
-
+DigitalIn button(SW3);
+DigitalOut led1(LED1);
 
 static spi_t spi_master = { 0 };
 
@@ -59,36 +60,53 @@ static spi_t spi_master = { 0 };
 #define CONFIG_STATUS_OK 0x00
 #define CONFIG_STATUS_NOT_SUPPORTED 0x01
 
-#define CONFIG_LEN 8
-#define CONFIG_STATUS_LEN 1
-
 #define TEST_SYM_CNT 5
 
-static uint8_t rx_pattern_8[TEST_SYM_CNT] = {0x11, 0x22, 0x33, 0x44, 0x55};
-static uint16_t rx_pattern_16[TEST_SYM_CNT] = {0x1111, 0x2222, 0x3333, 0x4444, 0x5555};
-static uint32_t rx_pattern_32[TEST_SYM_CNT] = {0x11111111, 0x22222222, 0x33333333, 0x44444444, 0x55555555};
+typedef enum {
+    FULL_DUPLEX,
+    HALF_DUPLEX_MOSI,
+    HALF_DUPLEX_MISO
+} duplex_t;
 
-static uint8_t rx_pattern_fill_sym_8[TEST_SYM_CNT] = {0x11, 0x22, 0x33, 0xFF, 0xFF};
-static uint16_t rx_pattern_fill_sym_16[TEST_SYM_CNT] = {0x1111, 0x2222, 0x3333, 0xFFFF, 0xFFFF};
-static uint32_t rx_pattern_fill_sym_32[TEST_SYM_CNT] = {0x11111111, 0x22222222, 0x33333333, 0xFFFFFFFF, 0xFFFFFFFF};
+/* SPI format/frequency configuration. */
+typedef struct {
+    uint8_t symbol_size;
+    spi_mode_t mode;
+    spi_bit_ordering_t bit_ordering;
+    uint32_t freq_hz;
+    uint32_t master_tx_cnt;
+    uint32_t master_rx_cnt;
+    uint32_t slave_tx_cnt;
+    uint32_t slave_rx_cnt;
+    bool master_tx_defined;
+    bool master_rx_defined;
+    bool slave_tx_defined;
+    bool slave_rx_defined;
+    bool auto_ss;
+    duplex_t duplex;
+} config_test_case_t;
 
-static uint8_t rx_pattern_not_full_8[TEST_SYM_CNT] = {0x11, 0x22, 0x33, 0x00, 0x00};
-static uint16_t rx_pattern_not_full_16[TEST_SYM_CNT] = {0x1111, 0x2222, 0x3333, 0x0000, 0x0000};
-static uint32_t rx_pattern_not_full_32[TEST_SYM_CNT] = {0x11111111, 0x22222222, 0x33333333, 0x00000000, 0x00000000};
-
+#define CONFIG_LEN (sizeof(config_test_case_t))
+#define CONFIG_STATUS_LEN 1
 
 static uint8_t tx_pattern_8[TEST_SYM_CNT] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE};
 static uint16_t tx_pattern_16[TEST_SYM_CNT] = {0xAAAA, 0xBBBB, 0xCCCC, 0xDDDD, 0xEEEE};
 static uint32_t tx_pattern_32[TEST_SYM_CNT] = {0xAAAAAAAA, 0xBBBBBBBB, 0xCCCCCCCC, 0xDDDDDDDD, 0xEEEEEEEE};
 
-static uint8_t m_config_buf[CONFIG_LEN];
-static uint8_t m_status[CONFIG_STATUS_LEN];
-static uint8_t m_tx_buff_uint8[TEST_SYM_CNT];
-static uint8_t m_rx_buff_uint8[TEST_SYM_CNT];
-static uint16_t m_tx_buff_uint16[TEST_SYM_CNT];
-static uint16_t m_rx_buff_uint16[TEST_SYM_CNT];
-static uint32_t m_tx_buff_uint32[TEST_SYM_CNT];
-static uint32_t m_rx_buff_uint32[TEST_SYM_CNT];
+static uint8_t rx1_pattern_8[TEST_SYM_CNT] = {0x11, 0x22, 0x33, 0x44, 0x55};
+static uint16_t rx1_pattern_16[TEST_SYM_CNT] = {0x1111, 0x2222, 0x3333, 0x4444, 0x5555};
+static uint32_t rx1_pattern_32[TEST_SYM_CNT] = {0x11111111, 0x22222222, 0x33333333, 0x44444444, 0x55555555};
+
+static uint8_t rx2_pattern_8[TEST_SYM_CNT] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE};
+static uint16_t rx2_pattern_16[TEST_SYM_CNT] = {0xAAAA, 0xBBBB, 0xCCCC, 0xDDDD, 0xEEEE};
+static uint32_t rx2_pattern_32[TEST_SYM_CNT] = {0xAAAAAAAA, 0xBBBBBBBB, 0xCCCCCCCC, 0xDDDDDDDD, 0xEEEEEEEE};
+
+static uint8_t tx_buff_uint8[TEST_SYM_CNT];
+static uint8_t rx_buff_uint8[TEST_SYM_CNT];
+static uint16_t tx_buff_uint16[TEST_SYM_CNT];
+static uint16_t rx_buff_uint16[TEST_SYM_CNT];
+static uint32_t tx_buff_uint32[TEST_SYM_CNT];
+static uint32_t rx_buff_uint32[TEST_SYM_CNT];
 
 static const uint8_t fill_symbol_8 = (uint8_t)0xFF;
 static const uint8_t fill_symbol_16 = (uint8_t)0xFFFF;
@@ -97,62 +115,79 @@ static const uint8_t fill_symbol_32 = (uint8_t)0xFFFFFFFF;
 static void *p_tx_buf;
 static void *p_rx_buf;
 static void *p_tx_pattern;
-static void *p_rx_pattern;
+static void *p_rx1_pattern;
+static void *p_rx2_pattern;
 static void *p_fill_sym;
 static uint32_t buff_size;
 
-typedef struct {
-    uint8_t preamble;
-    uint8_t symbol_size;
-    uint8_t spi_mode;
-    uint8_t bit_ordering;
-    uint32_t freq;
-} spi_transmission_config_t;
-
-/* SPI format/frequency configuration. */
-typedef struct {
-    uint8_t symbol_size;
-    spi_mode_t mode;
-    spi_bit_ordering_t bit_ordering;
-    uint32_t freq_hz;
-} config_test_case_t;
-
 /* Array witch test cases which represents different SPI configs for testing. */
 static config_test_case_t test_cases[] = {
-        /* default config */
-/* 00 */{8, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
+        /* default config: 8 bit symbol\full duplex\clock idle low\sample on the first clock edge\ MSB first\1 MHz clock\automatic SS handling */
+
+/* 00 */{8, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE    , SPI_BIT_ORDERING_MSB_FIRST, FREQ_200KHZ, TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , true , FULL_DUPLEX  },
+        /* symbol size testing */
 #if 0
-/* symbol size testing */
-/* 01 */{0, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
-/* 02 */{1, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
-/* 03 */{7, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
-/* 04 */{9, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
-/* 05 */{15, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
-/* 06 */{16, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
-/* 07 */{17, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
-/* 08 */{31, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
-/* 09 */{32, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
+/* 01 */{1  , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , true , FULL_DUPLEX  },
+/* 02 */{7  , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , true , FULL_DUPLEX  },
+/* 03 */{9  , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , true , FULL_DUPLEX  },
+/* 04 */{15 , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , true , FULL_DUPLEX  },
+/* 05 */{16 , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , true , FULL_DUPLEX  },
+/* 06 */{17 , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , true , FULL_DUPLEX  },
+/* 07 */{31 , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , true , FULL_DUPLEX  },
+/* 08 */{32 , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , true , FULL_DUPLEX  },
         /* mode testing */
-/* 10 */{8, SPI_MODE_IDLE_LOW_SAMPLE_SECOND_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
-/* 11 */{8, SPI_MODE_IDLE_HIGH_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
-/* 12 */{8, SPI_MODE_IDLE_HIGH_SAMPLE_SECOND_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ},
+/* 09 */{8  , SPI_MODE_IDLE_LOW_SAMPLE_SECOND_EDGE , SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , true , FULL_DUPLEX  },
+/* 10 */{8  , SPI_MODE_IDLE_HIGH_SAMPLE_FIRST_EDGE , SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , true , FULL_DUPLEX  },
+/* 11 */{8  , SPI_MODE_IDLE_HIGH_SAMPLE_SECOND_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , true , FULL_DUPLEX  },
         /* bit ordering testing */
-/* 13 */{8, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_LSB_FIRST, FREQ_1MHZ},
-        /* required freq testing */
+/* 12 */{8  , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_LSB_FIRST, FREQ_1MHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , true , FULL_DUPLEX  },
+        /* freq testing */
+/* 13 */{8  , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_200KHZ, TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , true , FULL_DUPLEX  },
+/* 14 */{8  , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_2MHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , true , FULL_DUPLEX  },
+/* 15 */{8  , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_MIN   , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , true , FULL_DUPLEX  },
+/* 16 */{8  , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_MAX   , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , true , FULL_DUPLEX  },
+        /* master: TX > RX */
+/* 17 */{8  , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ  , TEST_SYM_CNT   , TEST_SYM_CNT-2, TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , true , FULL_DUPLEX  },
+        /* master: TX < RX */
+/* 18 */{8  , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ  , TEST_SYM_CNT-2 , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , true , FULL_DUPLEX  },
+        /* slave: TX > RX */
+/* 19 */{8  , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT-2, true , true , true , true , true , FULL_DUPLEX  },
+        /* slave: TX < RX */
+/* 20 */{8  , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT-2, TEST_SYM_CNT  , true , true , true , true , true , FULL_DUPLEX  },
+        /* master tx buffer undefined */
+/* 21 */{8  , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , false, true , true , true , true , FULL_DUPLEX  },
+        /* master rx buffer undefined */
+/* 22 */{8  , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , false, true , true , true , FULL_DUPLEX  },
+        /* slave tx buffer undefined */
+/* 23 */{8  , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , false, true , true , FULL_DUPLEX  },
+        /* slave rx buffer undefined */
+/* 24 */{8  , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , false, true , FULL_DUPLEX  },
 #endif
-/* 14 */{8, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_200KHZ},
-/* 15 */{8, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_2MHZ},
-/* 16 */{8, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_MIN},
-/* 17 */{8, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST, FREQ_MAX},
+        /* manual ss hadling by master */
+/* 25 */{8  , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , false, FULL_DUPLEX  },
+        /* half duplex mode  */
+/* 26 */{8  , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , true , HALF_DUPLEX_MISO },
+/* 27 */{8  , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_1MHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , true , HALF_DUPLEX_MOSI },
+
 };
 
 
-static void clear_buf(void * addr, uint32_t size)
+static void wait_until_button_pressed()
 {
+    while (button.read() == 1);
+    while (button.read() == 0);
+}
+
+static void set_buffer(void * addr, uint32_t size, char val)
+{
+    if (addr == NULL) {
+        return;
+    }
+
     char *p_char = (char*)addr;
 
     for (uint32_t i = 0; i < size; i++) {
-        p_char[i] = 0;
+        p_char[i] = val;
     }
 }
 
@@ -161,9 +196,16 @@ static bool check_buffers(void *p_pattern, void *p_buffer, uint32_t size)
     const char * p_byte_pattern = (const char*) p_pattern;
     const char * p_byte_buffer = (const char*) p_buffer;
 
+    if (p_buffer == NULL || p_pattern == NULL) {
+        return true;
+    }
+
     while(size) {
         if (*p_byte_pattern != *p_byte_buffer) {
             printf("comp: 0x%X 0x%X \n", *p_byte_pattern, *p_byte_buffer);
+
+            printf("pattern: 0x%2X 0x%2X 0x%2X 0x%2X 0x%2X \n", p_byte_pattern[0], p_byte_pattern[1], p_byte_pattern[2], p_byte_pattern[3], p_byte_pattern[4]);
+            printf("buffer : 0x%2X 0x%2X 0x%2X 0x%2X 0x%2X \n", p_byte_buffer[0], p_byte_buffer[1], p_byte_buffer[2], p_byte_buffer[3], p_byte_buffer[4]);
             return false;
         }
         printf("comp: 0x%X 0x%X \n", *p_byte_pattern, *p_byte_buffer);
@@ -175,46 +217,193 @@ static bool check_buffers(void *p_pattern, void *p_buffer, uint32_t size)
     return true;
 }
 
-static void init_buffers(uint32_t symbol_size)
+static void init_transmission_buffers(uint32_t tc_id)
 {
-    if (symbol_size <= 8) {
-        p_tx_buf = m_tx_buff_uint8;
-        p_rx_buf = m_rx_buff_uint8;
+    p_tx_pattern = NULL;
+    p_rx1_pattern = NULL;
+    p_rx2_pattern = NULL;
+    p_tx_buf = NULL;
+    p_rx_buf = NULL;
+    p_fill_sym = NULL;
+
+    /* Default patterns for TX/RX buffers. */
+    tx_pattern_8[0] = 0xAA; tx_pattern_16[0] = 0xAAAA; tx_pattern_32[0] = 0xAAAAAAAA;
+    tx_pattern_8[1] = 0xBB; tx_pattern_16[1] = 0xAAAA; tx_pattern_32[1] = 0xAAAAAAAA;
+    tx_pattern_8[2] = 0xCC; tx_pattern_16[2] = 0xAAAA; tx_pattern_32[2] = 0xAAAAAAAA;
+    tx_pattern_8[3] = 0xDD; tx_pattern_16[3] = 0xAAAA; tx_pattern_32[3] = 0xAAAAAAAA;
+    tx_pattern_8[4] = 0xEE; tx_pattern_16[4] = 0xAAAA; tx_pattern_32[4] = 0xAAAAAAAA;
+
+    rx1_pattern_8[0] = 0x11; rx1_pattern_16[0] = 0x1111; rx1_pattern_32[0] = 0x11111111;
+    rx1_pattern_8[1] = 0x22; rx1_pattern_16[1] = 0x2222; rx1_pattern_32[1] = 0x22222222;
+    rx1_pattern_8[2] = 0x33; rx1_pattern_16[2] = 0x3333; rx1_pattern_32[2] = 0x33333333;
+    rx1_pattern_8[3] = 0x44; rx1_pattern_16[3] = 0x4444; rx1_pattern_32[3] = 0x44444444;
+    rx1_pattern_8[4] = 0x55; rx1_pattern_16[4] = 0x5555; rx1_pattern_32[4] = 0x55555555;
+
+    rx2_pattern_8[0] = 0xAA; rx2_pattern_16[0] = 0xAAAA; rx2_pattern_32[0] = 0x11111111;
+    rx2_pattern_8[1] = 0xBB; rx2_pattern_16[1] = 0xBBBB; rx2_pattern_32[1] = 0x22222222;
+    rx2_pattern_8[2] = 0xCC; rx2_pattern_16[2] = 0xCCCC; rx2_pattern_32[2] = 0x33333333;
+    rx2_pattern_8[3] = 0xDD; rx2_pattern_16[3] = 0xDDDD; rx2_pattern_32[3] = 0x44444444;
+    rx2_pattern_8[4] = 0xEE; rx2_pattern_16[4] = 0xEEEE; rx2_pattern_32[4] = 0x55555555;
+
+    /* Exception: master TX < master RX . */
+    if (test_cases[tc_id].master_tx_cnt < test_cases[tc_id].master_rx_cnt) {
+        rx2_pattern_8[0] = 0xAA; rx2_pattern_16[0] = 0xAAAA; rx2_pattern_32[0] = 0x11111111;
+        rx2_pattern_8[1] = 0xBB; rx2_pattern_16[1] = 0xBBBB; rx2_pattern_32[1] = 0x22222222;
+        rx2_pattern_8[2] = 0xCC; rx2_pattern_16[2] = 0xCCCC; rx2_pattern_32[2] = 0x33333333;
+        rx2_pattern_8[3] = 0xFF; rx2_pattern_16[3] = 0xFFFF; rx2_pattern_32[3] = 0xFFFFFFFF;
+        rx2_pattern_8[4] = 0xFF; rx2_pattern_16[4] = 0xFFFF; rx2_pattern_32[4] = 0xFFFFFFFF;
+    }
+    /* Exception: master TX > master RX . */
+    if (test_cases[tc_id].slave_tx_cnt > test_cases[tc_id].slave_rx_cnt) {
+        rx2_pattern_8[0] = 0xAA; rx2_pattern_16[0] = 0xAAAA; rx2_pattern_32[0] = 0x11111111;
+        rx2_pattern_8[1] = 0xBB; rx2_pattern_16[1] = 0xBBBB; rx2_pattern_32[1] = 0x22222222;
+        rx2_pattern_8[2] = 0xCC; rx2_pattern_16[2] = 0xCCCC; rx2_pattern_32[2] = 0x33333333;
+        rx2_pattern_8[3] = 0;    rx2_pattern_16[3] = 0;      rx2_pattern_32[3] = 0;
+        rx2_pattern_8[4] = 0;    rx2_pattern_16[4] = 0;      rx2_pattern_32[4] = 0;
+    }
+    /* Exception: slave TX < slave RX . */
+    if (test_cases[tc_id].slave_tx_cnt < test_cases[tc_id].slave_rx_cnt) {
+        rx1_pattern_8[0] = 0x11; rx1_pattern_16[0] = 0x1111; rx1_pattern_32[0] = 0x11111111;
+        rx1_pattern_8[1] = 0x22; rx1_pattern_16[1] = 0x2222; rx1_pattern_32[1] = 0x22222222;
+        rx1_pattern_8[2] = 0x33; rx1_pattern_16[2] = 0x3333; rx1_pattern_32[2] = 0x33333333;
+        rx1_pattern_8[3] = 0xFF; rx1_pattern_16[3] = 0xFFFF; rx1_pattern_32[3] = 0xFFFFFFFF;
+        rx1_pattern_8[4] = 0xFF; rx1_pattern_16[4] = 0xFFFF; rx1_pattern_32[4] = 0xFFFFFFFF;
+
+        rx2_pattern_8[0] = 0xAA; rx2_pattern_16[0] = 0xAAAA; rx2_pattern_32[0] = 0x11111111;
+        rx2_pattern_8[1] = 0xBB; rx2_pattern_16[1] = 0xBBBB; rx2_pattern_32[1] = 0x22222222;
+        rx2_pattern_8[2] = 0xCC; rx2_pattern_16[2] = 0xCCCC; rx2_pattern_32[2] = 0x33333333;
+        rx2_pattern_8[3] = 0xFF; rx2_pattern_16[3] = 0xFFFF; rx2_pattern_32[3] = 0xFFFFFFFF;
+        rx2_pattern_8[4] = 0xFF; rx2_pattern_16[4] = 0xFFFF; rx2_pattern_32[4] = 0xFFFFFFFF;
+    }
+
+    /* Exception: master TX buffer undefined . */
+    if (!test_cases[tc_id].master_tx_defined) {
+        rx2_pattern_8[0] = 0xFF; rx2_pattern_16[0] = 0xFFFF; rx2_pattern_32[0] = 0xFFFFFFFF;
+        rx2_pattern_8[1] = 0xFF; rx2_pattern_16[1] = 0xFFFF; rx2_pattern_32[1] = 0xFFFFFFFF;
+        rx2_pattern_8[2] = 0xFF; rx2_pattern_16[2] = 0xFFFF; rx2_pattern_32[2] = 0xFFFFFFFF;
+        rx2_pattern_8[3] = 0xFF; rx2_pattern_16[3] = 0xFFFF; rx2_pattern_32[3] = 0xFFFFFFFF;
+        rx2_pattern_8[4] = 0xFF; rx2_pattern_16[4] = 0xFFFF; rx2_pattern_32[4] = 0xFFFFFFFF;
+    }
+
+    /* Exception: slave TX buffer undefined . */
+    if (!test_cases[tc_id].slave_tx_defined) {
+        rx1_pattern_8[0] = 0xFF; rx1_pattern_16[0] = 0xFFFF; rx1_pattern_32[0] = 0xFFFFFFFF;
+        rx1_pattern_8[1] = 0xFF; rx1_pattern_16[1] = 0xFFFF; rx1_pattern_32[1] = 0xFFFFFFFF;
+        rx1_pattern_8[2] = 0xFF; rx1_pattern_16[2] = 0xFFFF; rx1_pattern_32[2] = 0xFFFFFFFF;
+        rx1_pattern_8[3] = 0xFF; rx1_pattern_16[3] = 0xFFFF; rx1_pattern_32[3] = 0xFFFFFFFF;
+        rx1_pattern_8[4] = 0xFF; rx1_pattern_16[4] = 0xFFFF; rx1_pattern_32[4] = 0xFFFFFFFF;
+
+        rx2_pattern_8[0] = 0xFF; rx2_pattern_16[0] = 0xFFFF; rx2_pattern_32[0] = 0xFFFFFFFF;
+        rx2_pattern_8[1] = 0xFF; rx2_pattern_16[1] = 0xFFFF; rx2_pattern_32[1] = 0xFFFFFFFF;
+        rx2_pattern_8[2] = 0xFF; rx2_pattern_16[2] = 0xFFFF; rx2_pattern_32[2] = 0xFFFFFFFF;
+        rx2_pattern_8[3] = 0xFF; rx2_pattern_16[3] = 0xFFFF; rx2_pattern_32[3] = 0xFFFFFFFF;
+        rx2_pattern_8[4] = 0xFF; rx2_pattern_16[4] = 0xFFFF; rx2_pattern_32[4] = 0xFFFFFFFF;
+    }
+
+    /* Exception: slave RX buffer undefined . */
+    if (!test_cases[tc_id].slave_rx_defined) {
+        rx2_pattern_8[0] = 0x11; rx2_pattern_16[0] = 0x1111; rx2_pattern_32[0] = 0x11111111;
+        rx2_pattern_8[1] = 0x22; rx2_pattern_16[1] = 0x2222; rx2_pattern_32[1] = 0x22222222;
+        rx2_pattern_8[2] = 0x33; rx2_pattern_16[2] = 0x3333; rx2_pattern_32[2] = 0x33333333;
+        rx2_pattern_8[3] = 0x44; rx2_pattern_16[3] = 0x4444; rx2_pattern_32[3] = 0x44444444;
+        rx2_pattern_8[4] = 0x55; rx2_pattern_16[4] = 0x5555; rx2_pattern_32[4] = 0x55555555;
+    }
+
+    /* Init pointers to TX/RX buffers based on symbol size. */
+    if (test_cases[tc_id].symbol_size <= 8) {
+
+        /* Handle symbol size. */
+        uint8_t sym_mask = ((1 << test_cases[tc_id].symbol_size) - 1);
+        for (uint32_t i = 0; i < TEST_SYM_CNT; i++) {
+            tx_pattern_8[i] = (tx_pattern_8[i] & sym_mask);
+            rx1_pattern_8[i] = (rx1_pattern_8[i] & sym_mask);
+            rx2_pattern_8[i] = (rx2_pattern_8[i] & sym_mask);
+        }
+        if (test_cases[tc_id].master_tx_defined) {
+            p_tx_buf = tx_buff_uint8;
+            p_tx_pattern = tx_pattern_8;
+        }
+        if (test_cases[tc_id].master_rx_defined) {
+            p_rx_buf = rx_buff_uint8;
+            p_rx1_pattern = rx1_pattern_8;
+            p_rx2_pattern = rx2_pattern_8;
+        }
         p_fill_sym = (void*) &fill_symbol_8;
-        p_tx_pattern = tx_pattern_8;
-        p_rx_pattern = rx_pattern_8;
         buff_size = 1 * TEST_SYM_CNT;
-        memcpy(m_tx_buff_uint8, tx_pattern_8, sizeof(m_tx_buff_uint8));
-        clear_buf(m_rx_buff_uint8, sizeof(m_rx_buff_uint8));
-    } else if (symbol_size <= 16) {
-        p_tx_buf = m_tx_buff_uint16;
-        p_rx_buf = m_rx_buff_uint16;
+        memcpy(tx_buff_uint8, tx_pattern_8, sizeof(tx_buff_uint8));
+        set_buffer(rx_buff_uint8, sizeof(rx_buff_uint8), 0x00);
+    } else if (test_cases[tc_id].symbol_size <= 16) {
+        /* Handle symbol size. */
+        uint16_t sym_mask = ((1 << test_cases[tc_id].symbol_size) - 1);
+        for (uint32_t i = 0; i < TEST_SYM_CNT; i++) {
+            tx_pattern_16[i] = (tx_pattern_16[i] & sym_mask);
+            rx1_pattern_16[i] = (rx1_pattern_16[i] & sym_mask);
+            rx2_pattern_16[i] = (rx2_pattern_16[i] & sym_mask);
+        }
+        if (test_cases[tc_id].master_tx_defined) {
+            p_tx_buf = tx_buff_uint16;
+            p_tx_pattern = tx_pattern_16;
+        }
+        if (test_cases[tc_id].master_rx_defined) {
+            p_rx_buf = rx_buff_uint16;
+            p_rx1_pattern = rx1_pattern_16;
+            p_rx2_pattern = rx2_pattern_16;
+        }
         p_fill_sym = (void*) &fill_symbol_16;
-        p_tx_pattern = tx_pattern_16;
-        p_rx_pattern = rx_pattern_16;
         buff_size = 2 * TEST_SYM_CNT;
-        memcpy(m_tx_buff_uint16, tx_pattern_16, sizeof(m_tx_buff_uint16));
-        clear_buf(m_rx_buff_uint16, sizeof(m_rx_buff_uint16));
+        memcpy(tx_buff_uint16, tx_pattern_16, sizeof(tx_buff_uint16));
+        set_buffer(rx_buff_uint16, sizeof(rx_buff_uint16), 0x00);
     } else {
-        p_tx_buf = m_tx_buff_uint32;
-        p_rx_buf = m_rx_buff_uint32;
+        /* Handle symbol size. */
+        uint32_t sym_mask = ((1 << test_cases[tc_id].symbol_size) - 1);
+        for (uint32_t i = 0; i < TEST_SYM_CNT; i++) {
+            tx_pattern_32[i] = (tx_pattern_16[i] & sym_mask);
+            rx1_pattern_32[i] = (rx1_pattern_16[i] & sym_mask);
+            rx2_pattern_32[i] = (rx2_pattern_16[i] & sym_mask);
+        }
+        if (test_cases[tc_id].master_tx_defined) {
+            p_tx_buf = tx_buff_uint32;
+            p_tx_pattern = tx_pattern_32;
+        }
+        if (test_cases[tc_id].master_rx_defined) {
+            p_rx_buf = rx_buff_uint32;
+            p_rx1_pattern = rx1_pattern_32;
+            p_rx2_pattern = rx2_pattern_32;
+        }
         p_fill_sym = (void*) &fill_symbol_32;
-        p_tx_pattern = tx_pattern_32;
-        p_rx_pattern = rx_pattern_32;
         buff_size = 4 * TEST_SYM_CNT;
-        memcpy(m_tx_buff_uint32, tx_pattern_32, sizeof(m_tx_buff_uint32));
-        clear_buf(m_rx_buff_uint16, sizeof(m_rx_buff_uint16));
+        memcpy(tx_buff_uint32, tx_pattern_32, sizeof(tx_buff_uint32));
+        set_buffer(rx_buff_uint16, sizeof(rx_buff_uint16), 0x00);
     }
 }
 
+void handle_ss(DigitalOut * ss, bool select)
+{
+    if (ss) {
+        if (select) {
+            *ss = 0;
+        } else {
+            *ss = 1;
+        }
+    }
+}
+
+bool check_capabilities(spi_capabilities_t *p_cabs, uint32_t symbol_size, bool slave, bool half_duplex)
+{
+    if (!(p_cabs->word_length & (1 << (symbol_size - 1))) ||
+        (slave && !p_cabs->support_slave_mode) ||
+        (half_duplex && !p_cabs->half_duplex)) {
+        return false;
+    }
+
+    return true;
+}
 
 void test_transfer_master()
 {
-    int32_t count;
+    uint32_t count;
     int8_t status;
-    uint32_t test_freq;
-    spi_capabilities_t capabilities =
-        { 0 };
+    spi_capabilities_t capabilities = { 0 };
 
     spi_get_capabilities(spi_get_module(SPI_MASTER_MOSI,
                                         SPI_MASTER_MISO,
@@ -222,36 +411,58 @@ void test_transfer_master()
                          NC,
                          &capabilities);
 
-
-    spi_init(&spi_master, false, SPI_MASTER_MOSI, SPI_MASTER_MISO, SPI_MASTER_CLK, SPI_MASTER_SS);
-
     for (uint32_t tc_id = 0; tc_id < (sizeof(test_cases) / sizeof(config_test_case_t)); tc_id++) {
+        DigitalOut *ss_pin = NULL;
+        PinName ss = SPI_MASTER_SS;
+        PinName miso = SPI_MASTER_MISO;
+        PinName mosi = SPI_MASTER_MOSI;
+        uint32_t clocked_symbols_1 = (test_cases[tc_id].slave_tx_cnt + test_cases[tc_id].slave_rx_cnt);
+        uint32_t clocked_symbols_2 = (TEST_SYM_CNT + TEST_SYM_CNT);
 
-        printf("---> Test Case: [%u] \n", tc_id);
+        printf("---> Test Case: [%lu] \n", tc_id);
 
-        if (capabilities.word_length & (1 << (test_cases[tc_id].symbol_size - 1))) {
+        /* Adapt Full duplex/Half duplex settings. */
+        switch(test_cases[tc_id].duplex) {
+            case HALF_DUPLEX_MOSI:
+                miso = NC;
+            break;
 
-            /* Prepare transmission format which will be used during the transfer. */
+            case HALF_DUPLEX_MISO:
+                mosi = NC;
+            break;
+
+            default:
+                clocked_symbols_1 = TEST_SYM_CNT;
+                clocked_symbols_2 = TEST_SYM_CNT;
+            break;
+        }
+
+        /* Adapt manual/auto SS handling by master. */
+        if (!test_cases[tc_id].auto_ss) {
+            ss_pin = new DigitalOut(SPI_MASTER_SS);
+            ss = NC;
+            *ss_pin = 1;
+        }
+
+        spi_init(&spi_master, false, mosi, miso, SPI_MASTER_CLK, ss);
+
+        /* Continue if master can handle the config, otherwise skip it. */
+        if (check_capabilities(&capabilities, test_cases[tc_id].symbol_size, false, test_cases[tc_id].duplex)) {
+
+            /* Adapt min/max frequency for testing based of capabilities. */
             switch(test_cases[tc_id].freq_hz) {
                 case FREQ_MIN:
-                    test_freq = capabilities.minimum_frequency;
+                    test_cases[tc_id].freq_hz = capabilities.minimum_frequency;
                 break;
 
                 case FREQ_MAX:
-                    test_freq = capabilities.maximum_frequency;
+                    test_cases[tc_id].freq_hz = capabilities.maximum_frequency;
                 break;
 
                 default:
-                    test_freq = test_cases[tc_id].freq_hz;
+
                 break;
             }
-
-            spi_transmission_config_t config =
-            { CONFIG_START,
-              test_cases[tc_id].symbol_size,
-              test_cases[tc_id].mode,
-              test_cases[tc_id].bit_ordering,
-              test_freq };
 
             spi_format(&spi_master,
                        test_cases[DEFAULT_CFG].symbol_size,
@@ -260,185 +471,75 @@ void test_transfer_master()
 
             spi_frequency(&spi_master, test_cases[DEFAULT_CFG].freq_hz);
 
-            /* Send transmission format to slave. Slave will return status if given format can be
+            /* Send config to slave. Slave will return status if given config can be
              * handled by slave.
              */
-            wait_ms(100);
+            wait_until_button_pressed();
+            handle_ss(ss_pin, true);
+            count = spi_transfer(&spi_master, &test_cases[tc_id], CONFIG_LEN, NULL, 0, (void*) &fill_symbol_8);
+            handle_ss(ss_pin, false);
 
-            count = spi_transfer(&spi_master, &config, CONFIG_LEN, NULL, 0, (void*) &fill_symbol_8);
-
-            wait_ms(1000);
-
+            wait_until_button_pressed();
+            handle_ss(ss_pin, true);
             count = spi_transfer(&spi_master, NULL, 0, &status, CONFIG_STATUS_LEN, (void*) &fill_symbol_8);
+            handle_ss(ss_pin, false);
 
+            /* Continue if slave can handle the config, otherwise skip it. */
             if (status == CONFIG_STATUS_OK) {
                 spi_format(&spi_master,
                            test_cases[tc_id].symbol_size,
                            test_cases[tc_id].mode,
                            test_cases[tc_id].bit_ordering);
 
-                spi_frequency(&spi_master, test_freq);
+                spi_frequency(&spi_master, test_cases[tc_id].freq_hz);
 
-                /* Test 1: RX == TX (send 5 symbols, read 5 symbols). */
+                init_transmission_buffers(tc_id);
 
-                init_buffers(test_cases[tc_id].symbol_size);
+                wait_until_button_pressed();
+                handle_ss(ss_pin, true);
+                count = spi_transfer(&spi_master, p_tx_buf, test_cases[tc_id].master_tx_cnt, p_rx_buf, test_cases[tc_id].master_rx_cnt, (void*) p_fill_sym);
+                handle_ss(ss_pin, false);
 
-                wait_ms(100);
-
-                count = spi_transfer(&spi_master, p_tx_buf, TEST_SYM_CNT, p_rx_buf, TEST_SYM_CNT, (void*) p_fill_sym);
-
-                TEST_ASSERT_EQUAL(true, check_buffers(p_rx_pattern, p_rx_buf, buff_size));
+                TEST_ASSERT_EQUAL(true, check_buffers(p_rx1_pattern, p_rx_buf, buff_size));
                 TEST_ASSERT_EQUAL(true, check_buffers(p_tx_pattern, p_tx_buf, buff_size));
-                TEST_ASSERT_EQUAL(TEST_SYM_CNT, count);
+                TEST_ASSERT_EQUAL(clocked_symbols_1, count);
 
-                /* Check what slave received in the last transfer (send what received to slave
+                /* Check what slave received in the last transfer (send received data to slave
                  * and slave will do the same). */
 
-                if (test_cases[tc_id].symbol_size <= 8) {
-                    memcpy(p_tx_buf, p_rx_buf, sizeof(m_tx_buff_uint8));
-                } else if (test_cases[tc_id].symbol_size <= 16) {
-                    memcpy(p_tx_buf, p_rx_buf, sizeof(m_tx_buff_uint16));
-                } else {
-                    memcpy(p_tx_buf, p_rx_buf, sizeof(m_tx_buff_uint32));
+                if (p_tx_buf && p_rx_buf) {
+                    if (test_cases[tc_id].symbol_size <= 8) {
+                        memcpy(p_tx_buf, p_rx_buf, sizeof(tx_buff_uint8));
+                    } else if (test_cases[tc_id].symbol_size <= 16) {
+                        memcpy(p_tx_buf, p_rx_buf, sizeof(tx_buff_uint16));
+                    } else {
+                        memcpy(p_tx_buf, p_rx_buf, sizeof(tx_buff_uint32));
+                    }
                 }
 
-                clear_buf(p_rx_buf, buff_size);
+                set_buffer(p_rx_buf, buff_size, 0x00);
 
-                wait_ms(100);
-
+                wait_until_button_pressed();
+                handle_ss(ss_pin, true);
                 count = spi_transfer(&spi_master, p_tx_buf, TEST_SYM_CNT, p_rx_buf, TEST_SYM_CNT, (void*) p_fill_sym);
+                handle_ss(ss_pin, false);
 
-                TEST_ASSERT_EQUAL(true, check_buffers(p_rx_buf, p_tx_pattern, buff_size));
-                TEST_ASSERT_EQUAL(true, check_buffers(p_tx_buf, p_rx_pattern, buff_size));
-                TEST_ASSERT_EQUAL(TEST_SYM_CNT, count);
-
-                /* Test 2: Master: TX < RX (send 3 symbols, receive 5 symbols). */
-                init_buffers(test_cases[tc_id].symbol_size);
-
-                wait_ms(100);
-
-                count = spi_transfer(&spi_master, p_tx_buf, TEST_SYM_CNT - 2, p_rx_buf, TEST_SYM_CNT, (void*) p_fill_sym);
-
-                TEST_ASSERT_EQUAL(true, check_buffers(p_rx_pattern, p_rx_buf, buff_size));
-                TEST_ASSERT_EQUAL(true, check_buffers(p_tx_pattern, p_tx_buf, buff_size));
-                TEST_ASSERT_EQUAL(TEST_SYM_CNT, count);
-
-                /* Check what slave received in the last transfer (send what received to slave
-                 * and slave will do the same). */
-
-                if (test_cases[tc_id].symbol_size <= 8) {
-                    p_rx_pattern = rx_pattern_fill_sym_8;
-                } else if (test_cases[tc_id].symbol_size <= 16) {
-                    p_rx_pattern = rx_pattern_fill_sym_16;
-                } else {
-                    p_rx_pattern = rx_pattern_fill_sym_32;
-                }
-
-                clear_buf(p_rx_buf, buff_size);
-
-                count = spi_transfer(&spi_master, p_tx_buf, TEST_SYM_CNT, p_rx_buf, TEST_SYM_CNT, (void*) p_fill_sym);
-
-                //TEST_ASSERT_EQUAL(true, check_buffers(p_rx_pattern, p_rx_buf, buff_size));
-                //TEST_ASSERT_EQUAL(true, check_buffers(p_tx_pattern, p_tx_buf, buff_size));
-                //TEST_ASSERT_EQUAL(TEST_SYM_CNT, count);
-
-                /* Test 3: Master: TX > RX (send 5 symbols, receive 3 symbols). */
-
-                init_buffers(test_cases[tc_id].symbol_size);
-
-                clear_buf(p_rx_buf, buff_size);
-
-                wait_ms(100);
-
-                count = spi_transfer(&spi_master, p_tx_buf, TEST_SYM_CNT, p_rx_buf, TEST_SYM_CNT, (void*) p_fill_sym);
-
-                if (test_cases[tc_id].symbol_size <= 8) {
-                    p_rx_pattern = rx_pattern_not_full_8;
-                } else if (test_cases[tc_id].symbol_size <= 16) {
-                    p_rx_pattern = rx_pattern_not_full_16;
-                } else {
-                    p_rx_pattern = rx_pattern_fill_sym_32;
-                }
-
-                TEST_ASSERT_EQUAL(true, check_buffers(p_rx_pattern, p_rx_buf, buff_size));
-                TEST_ASSERT_EQUAL(true, check_buffers(p_tx_pattern, p_tx_buf, buff_size));
-                TEST_ASSERT_EQUAL(TEST_SYM_CNT, count);
-
-                /* Test 4: Slave: TX > RX (send 5 symbols, receive 3 symbols). */
-
-                init_buffers(test_cases[tc_id].symbol_size);
-
-                clear_buf(p_rx_buf, buff_size);
-
-                wait_ms(100);
-
-                count = spi_transfer(&spi_master, p_tx_buf, TEST_SYM_CNT, p_rx_buf, TEST_SYM_CNT, (void*) p_fill_sym);
-
-
-
-
-
-
-
-
+                TEST_ASSERT_EQUAL(true, check_buffers(p_rx2_pattern, p_rx_buf, buff_size));
+                TEST_ASSERT_EQUAL(true, check_buffers(p_rx1_pattern, p_tx_buf, buff_size));
+                TEST_ASSERT_EQUAL(clocked_symbols_2, count);
 
             } else if (status == CONFIG_STATUS_NOT_SUPPORTED) {
-                printf("Format not supported by slave. Skipping. \n");
+                printf("Config not supported by slave. Skipping. \n");
             } else {
+                printf("status: 0x%X \n", status);
                 TEST_ASSERT_TRUE_MESSAGE(false, "Invalid configuration status. Communication error!");
             }
         } else {
             printf("Format not supported by master. Skipping. \n");
         }
+
+        spi_free(&spi_master);
     }
-
-    spi_free(&spi_master);
-}
-
-void test_transfer_master_single()
-{
-    int32_t count;
-    int8_t status;
-    int32_t tc_id = 12;
-
-    spi_init(&spi_master, false, SPI_MASTER_MOSI, SPI_MASTER_MISO, SPI_MASTER_CLK, SPI_MASTER_SS);
-
-    spi_format(&spi_master,
-               test_cases[tc_id].symbol_size,
-               test_cases[tc_id].mode,
-               test_cases[tc_id].bit_ordering);
-    spi_frequency(&spi_master, test_cases[tc_id].freq_hz);
-
-    wait(2);
-
-    p_tx_buf = m_tx_buff_uint8;
-    p_rx_buf = m_rx_buff_uint8;
-    p_fill_sym = (void*) &fill_symbol_8;
-    memcpy(m_tx_buff_uint8, tx_pattern_8, sizeof(m_tx_buff_uint8));
-
-    wait_ms(100);
-
-    count = spi_transfer(&spi_master, p_tx_buf, TEST_SYM_CNT, p_rx_buf, TEST_SYM_CNT, (void*) p_fill_sym);
-
-    printf("SPI count: %u \n", count);
-    printf("master tx: 0x%X 0x%X 0x%X 0x%X 0x%X \n", m_tx_buff_uint8[0], m_tx_buff_uint8[1], m_tx_buff_uint8[2],
-            m_tx_buff_uint8[3], m_tx_buff_uint8[4]);
-    printf("master rx: 0x%X 0x%X 0x%X 0x%X 0x%X \n", m_rx_buff_uint8[0], m_rx_buff_uint8[1], m_rx_buff_uint8[2],
-            m_rx_buff_uint8[3], m_rx_buff_uint8[4]);
-
-    memcpy(p_tx_buf, p_rx_buf, sizeof(m_tx_buff_uint8));
-
-    wait_ms(100);
-
-    count = spi_transfer(&spi_master, p_tx_buf, TEST_SYM_CNT, p_rx_buf, TEST_SYM_CNT, (void*) p_fill_sym);
-
-    printf("SPI count: %u \n", count);
-    printf("master tx: 0x%X 0x%X 0x%X 0x%X 0x%X \n", m_tx_buff_uint8[0], m_tx_buff_uint8[1], m_tx_buff_uint8[2],
-            m_tx_buff_uint8[3], m_tx_buff_uint8[4]);
-    printf("master rx: 0x%X 0x%X 0x%X 0x%X 0x%X \n", m_rx_buff_uint8[0], m_rx_buff_uint8[1], m_rx_buff_uint8[2],
-            m_rx_buff_uint8[3], m_rx_buff_uint8[4]);
-
-    spi_free(&spi_master);
 }
 
 utest::v1::status_t test_setup(const size_t number_of_cases)
@@ -447,20 +548,9 @@ utest::v1::status_t test_setup(const size_t number_of_cases)
     return verbose_test_setup_handler(number_of_cases);
 }
 
-utest::v1::status_t greentea_failure_handler(const Case * const source, const failure_t reason)
-{
-    greentea_case_failure_abort_handler(source, reason);
-    return STATUS_ABORT;
-}
-
-utest::v1::status_t greentea_failure_handler_abort(const Case * const source, const failure_t reason)
-{
-    greentea_case_failure_abort_handler(source, reason);
-    return STATUS_ABORT;
-}
 
 Case cases[] = {
-    Case("SPI - format and frequency testing (automatic ss)", test_transfer_master, greentea_failure_handler),
+    Case("SPI - format and frequency testing (automatic ss)", test_transfer_master),
     //Case("SPI - single master transfer test", test_transfer_master_single, greentea_failure_handler)
 };
 

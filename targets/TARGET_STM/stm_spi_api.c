@@ -107,6 +107,9 @@ void spi_get_capabilities(SPIName name, PinName ssel, spi_capabilities_t *cap)
 {
     cap->word_length = (1<<7 | 1<<15);
 
+    cap->support_slave_mode = true;
+    cap->half_duplex = true;
+
     cap->minimum_frequency = 200000;
     cap->maximum_frequency = 2000000;
 }
@@ -376,7 +379,7 @@ static uint32_t spi_write(spi_t *obj, uint32_t value) {
      *  infinitely here in case of faulty device for insatnce,
      *  but this will increase performances significantly
      */
-
+    //core_util_critical_section_enter();
     /* Wait TXE flag to transmit data */
     while (!LL_SPI_IsActiveFlag_TXE(SPI_INST(obj)));
 
@@ -395,6 +398,7 @@ static uint32_t spi_write(spi_t *obj, uint32_t value) {
     } else {
         out = LL_SPI_ReceiveData8(SPI_INST(obj));
     }
+    //core_util_critical_section_exit();
     return out;
 }
 
