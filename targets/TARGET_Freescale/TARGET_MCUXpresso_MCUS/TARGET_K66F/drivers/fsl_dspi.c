@@ -1615,8 +1615,10 @@ void DSPI_SlaveTransferHandleIRQ(SPI_Type *base, dspi_slave_handle_t *handle)
     }
 }
 
+//void my_log(uint32_t a, uint32_t b, uint32_t c, uint32_t d, uint32_t e);
 static void DSPI_CommonIRQHandler(SPI_Type *base, void *param)
 {
+    //my_log(8, !DSPI_IsMaster(base), DSPI_GetStatusFlags(base), base->RSER, 0);
     if (DSPI_IsMaster(base))
     {
         s_dspiMasterIsr(base, (dspi_master_handle_t *)param);
@@ -1625,6 +1627,7 @@ static void DSPI_CommonIRQHandler(SPI_Type *base, void *param)
     {
         s_dspiSlaveIsr(base, (dspi_slave_handle_t *)param);
     }
+    //my_log(8, !DSPI_IsMaster(base), DSPI_GetStatusFlags(base), base->RSER, 1);
 }
 
 #if defined(SPI0)

@@ -85,7 +85,7 @@ typedef struct {
     DMAUsage    hint;
 } spi_transfer_t;
 
-#define FSL_SPI_SLAVE_BUFFER_SZ 16
+#define FSL_SPI_SLAVE_BUFFER_SZ 128
 #endif
 
 struct spi_s {

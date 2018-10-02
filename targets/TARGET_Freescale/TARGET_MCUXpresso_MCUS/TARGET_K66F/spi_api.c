@@ -72,6 +72,7 @@ void spi_init(spi_t *obj, bool is_slave, PinName mosi, PinName miso, PinName scl
         pinmap_pinout(ssel, PinMap_SPI_SSEL);
     }
     obj->is_slave = is_slave;
+    obj->u.slave.reverse = NULL;
 }
 
 void spi_free(spi_t *obj)
@@ -208,6 +209,7 @@ static void spi_reverse_bits_at(spi_t *obj, const void *from, void *to, uint32_t
 
     spi_set_symbol(obj, to, i, val);
 }
+
 /// Take `len` symbols from `from`, reverse & shifts the bits before storing them in `to`.
 /// `from` and `to` might be aliases to the same location.
 ///
@@ -220,16 +222,16 @@ static void spi_reverse_bits_in_place(spi_t *obj, void *buf, uint32_t len) {
     }
 }
 
-void my_log(uint32_t a, uint32_t b, uint32_t c, uint32_t d, uint32_t e);
+//void my_log(uint32_t a, uint32_t b, uint32_t c, uint32_t d, uint32_t e);
 
 static void spi_irq_handler(spi_t *obj) {
-    my_log(0, obj->is_slave, (void*)obj->pending.rx, (void*)obj->pending.tx, obj->handler);
+    //my_log(0, obj->is_slave, DSPI_GetStatusFlags(spi_address[obj->instance]), ((SPI_Type *)spi_address[obj->instance])->RSER, 0);
     if (obj->handler != NULL) {
         obj->transfered = obj->transfering;
 
-        my_log(0, obj->is_slave, (void*)obj->pending.rx, (void*)obj->pending.tx, 1);
         if ((obj->pending.rx != NULL) || (obj->pending.tx != NULL)) {
-            my_log(0, obj->is_slave, (void*)obj->pending.rx, (void*)obj->pending.tx, 2);
+            //my_log(0, obj->is_slave, (uint32_t)obj->pending.rx, (uint32_t)obj->pending.tx, 2);
+            //my_log(0, obj->is_slave, obj->pending.rx_len, obj->pending.tx_len, 3);
             spi_transfer_async(obj,
                     obj->pending.tx, obj->pending.tx_len,
                     obj->pending.rx, obj->pending.rx_len,
@@ -240,12 +242,14 @@ static void spi_irq_handler(spi_t *obj) {
             obj->handler = NULL;
             obj->ctx = NULL;
 
-            my_log(0, obj->is_slave, (void*)obj->pending.rx, (void*)obj->pending.tx, 3);
+            //my_log(0, obj->is_slave, (uint32_t)obj->pending.rx, (uint32_t)obj->pending.tx, 4);
+            //my_log(0, obj->is_slave, (uint32_t)obj->u.slave.reverse, 0, 5);
 
             if (obj->is_slave && obj->u.slave.reverse != NULL) {
-                spi_reverse_bits_in_place(obj, obj->u.slave.reverse, obj->transfering);
+                spi_reverse_bits_in_place(obj, obj->u.slave.reverse, obj->transfered);
                 obj->u.slave.reverse = NULL;
             }
+            
             spi_async_event_t event = {
                 .transfered = obj->transfered,
                 .error = false
@@ -254,7 +258,7 @@ static void spi_irq_handler(spi_t *obj) {
             handler(obj, ctx, &event);
         }
     }
-    my_log(0, obj->is_slave, (void*)obj->pending.rx, (void*)obj->pending.tx, 4);
+    //my_log(0, obj->is_slave, DSPI_GetStatusFlags(spi_address[obj->instance]), ((SPI_Type *)spi_address[obj->instance])->RSER, 6);
 }
 static void spi_master_irq_handler(SPI_Type *base, dspi_master_handle_t *handle, status_t status, void *userData) {
     spi_irq_handler(userData);
@@ -271,7 +275,7 @@ uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
                       void *rx_buffer, uint32_t rx_length, const void *fill_symbol) {
     int total;
 
-    my_log(2, obj->is_slave, rx_buffer, tx_buffer, tx_length);
+    //my_log(2, obj->is_slave, (uint32_t)rx_buffer, (uint32_t)tx_buffer, tx_length);
     if ((tx_length == 1) || (rx_length == 1)) {
         uint32_t val_i = 0;
         uint32_t val_o = 0;
@@ -334,6 +338,8 @@ uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
 static void spi_pending_transfer_set(spi_t *obj, const void *tx, uint32_t tx_len, void *rx, uint32_t rx_len, const void *fill, DMAUsage hint) {
     obj->pending.tx = tx;
     obj->pending.tx_len = tx_len;
+    obj->pending.tx = NULL;
+    obj->pending.tx_len = 0;
     obj->pending.rx = rx;
     obj->pending.rx_len = rx_len;
     obj->pending.fill = fill;
@@ -347,7 +353,7 @@ bool spi_transfer_async(spi_t *obj, const void *tx, uint32_t tx_len, void *rx, u
 
     obj->handler = handler;
     obj->ctx = ctx;
-    my_log(1, obj->is_slave, tx_len, rx_len, 0);
+    //my_log(1, obj->is_slave, tx_len, rx_len, 0);
 
     if (obj->half_duplex) {
         if (!obj->is_slave && (tx_len != 0)) {
@@ -372,13 +378,14 @@ bool spi_transfer_async(spi_t *obj, const void *tx, uint32_t tx_len, void *rx, u
     } else {
         obj->transfering = tx_len;
     }
-    my_log(1, obj->is_slave, rx, tx, 1);
+    //my_log(1, obj->is_slave, rx, tx, 1);
 
     if (obj->is_slave && (obj->order == SPI_BIT_ORDERING_LSB_FIRST) && (tx != NULL)) {
         obj->transfering = MIN(FSL_SPI_SLAVE_BUFFER_SZ / spi_symbol_size(obj), obj->transfering);
 
         if (obj->u.slave.reverse == NULL) {
             obj->u.slave.reverse = rx;
+            //my_log(1, obj->is_slave, (uint32_t)obj->u.slave.reverse, 0xDEADBEEF, 2);
         }
 
         if (obj->half_duplex) {
@@ -390,8 +397,12 @@ bool spi_transfer_async(spi_t *obj, const void *tx, uint32_t tx_len, void *rx, u
             uint8_t *next_rx = NULL;
             uint32_t next_rx_len = rx_len;
             if (rx != NULL) {
-                next_rx = ((uint8_t *)rx) + obj->transfering * spi_symbol_size(obj);
                 next_rx_len -= obj->transfering;
+                if (next_rx_len == 0) {
+                    next_rx = NULL;
+                } else {
+                    next_rx = ((uint8_t *)rx) + obj->transfering * spi_symbol_size(obj);
+                }
             }
             spi_pending_transfer_set(obj, next_tx, tx_len - obj->transfering, next_rx, next_rx_len, fill, hint);
         }
@@ -403,7 +414,7 @@ bool spi_transfer_async(spi_t *obj, const void *tx, uint32_t tx_len, void *rx, u
         tx = obj->u.slave.buffer;
     }
 
-    my_log(1, obj->is_slave, obj->transfering, obj->transfered, 2);
+    //my_log(1, obj->is_slave, obj->transfering, obj->transfered, 3);
 
     DSPI_SetDummyData(spi_address[obj->instance], *(uint32_t *)fill);
     if (!obj->is_slave) {
@@ -429,6 +440,7 @@ bool spi_transfer_async(spi_t *obj, const void *tx, uint32_t tx_len, void *rx, u
             return false;
         }
     }
+    //my_log(1, obj->is_slave, DSPI_GetStatusFlags(spi_address[obj->instance]), 0, 4);
     return true;
 }
 
