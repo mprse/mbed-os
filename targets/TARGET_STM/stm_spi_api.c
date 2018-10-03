@@ -185,7 +185,15 @@ static const struct {
 #endif
 };
 
+void spi_get_capabilities(SPIName name, PinName ssel, spi_capabilities_t *cap)
+{
+    cap->word_length = (1<<7 | 1<<15);
+    cap->support_slave_mode = true;
+    cap->half_duplex = true;
 
+    cap->minimum_frequency = 200000;
+    cap->maximum_frequency = 2000000;
+}
 
 void init_spi(spi_t *obj)
 {
