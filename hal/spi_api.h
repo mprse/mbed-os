@@ -22,7 +22,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "device.h"
+#include "PeripheralNames.h"
+#include "PinNames.h"
+
 #include "hal/dma_api.h"
 #include "hal/buffer.h"
 
@@ -63,6 +65,7 @@ typedef enum _spi_bit_ordering_t {
 
 typedef struct _spi_async_event_t {
     uint32_t transfered;
+    bool     error;
 } spi_async_event_t;
 
 typedef void (*spi_async_handler_f)(spi_t *obj, void *ctx, spi_async_event_t *event);
