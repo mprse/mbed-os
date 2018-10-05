@@ -22,6 +22,7 @@
 #include "PinNames.h"
 #if DEVICE_SPI_ASYNCH
 #include "fsl_dspi_edma.h"
+#include "spi_api.h"
 #endif
 #if DEVICE_SERIAL_ASYNCH
 #include "fsl_uart_edma.h"
@@ -70,17 +71,61 @@ struct i2c_s {
     uint8_t next_repeated_start;
 };
 
+#if DEVICE_SPI_ASYNCH
+typedef struct {
+    uint32_t    skip; /*!< number of symbol to skip before processing the other direction. */
+
+    const void  *tx_buffer;
+    uint32_t    tx_length;
+
+    void        *rx_buffer;
+    uint32_t    rx_length;
+
+    const void  *fill_symbol;
+    DMAUsage    hint;
+} spi_transfer_t;
+
+#define FSL_SPI_SLAVE_BUFFER_SZ 16
+#endif
+
 struct spi_s {
     uint32_t instance;
     uint8_t bits;
-    bool slave;
+    bool is_slave;
+    spi_bit_ordering_t order;
 #if DEVICE_SPI_ASYNCH
-    status_t status;
-    dspi_master_handle_t spi_master_handle;
-    dspi_master_edma_handle_t spi_dma_master_handle;
-    dma_options_t spiDmaMasterRx;
-    dma_options_t spiDmaMasterTx;
-    dma_options_t spiDmaMasterIntermediary;
+    volatile bool done;
+    bool half_duplex;
+    spi_async_handler_f handler;
+    void *ctx;
+
+    uint32_t transfered;
+    uint32_t transfering;
+
+    union mode_u {
+        struct master_s {
+            dspi_master_handle_t handle;
+            dspi_master_edma_handle_t spi_dma_master_handle;
+            dma_options_t spiDmaMasterRx;
+            dma_options_t spiDmaMasterTx;
+            dma_options_t spiDmaMasterIntermediary;
+        } master;
+        struct slave_s {
+            dspi_slave_handle_t handle;
+            spi_transfer_t xfer;
+            uint8_t buffer[FSL_SPI_SLAVE_BUFFER_SZ]; /*!< used when dealing with lsb first */
+            void *reverse;
+        } slave;
+    } u;
+
+    struct pending_s {
+        const void *tx;
+        uint32_t tx_len;
+        void *rx;
+        uint32_t rx_len;
+        const void *fill;
+        DMAUsage hint;
+    } pending;
 #endif
 };
 
