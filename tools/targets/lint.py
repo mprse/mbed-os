@@ -27,7 +27,7 @@ if __name__ == "__main__":
     ROOT = abspath(join(dirname(__file__), "..", ".."))
     sys.path.insert(0, ROOT)
 from copy import copy
-from yaml import dump_all
+from yaml import safe_dump_all as dump_all
 import argparse
 
 from tools.targets import Target, set_targets_json_location, TARGET_MAP
