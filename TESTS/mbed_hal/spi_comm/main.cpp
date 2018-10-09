@@ -119,22 +119,15 @@ using namespace utest::v1;
 
 /* Pins configuration. */
 #if (BUILD_TYPE == BUILD_MASTER)
-#define SPI_MASTER_MOSI      PTD2
-#define SPI_MASTER_MISO      PTD3
-#define SPI_MASTER_SS        PTD0
-#define SPI_MASTER_CLK       PTD1
+#define SPI_MASTER_MOSI      PTD13
+#define SPI_MASTER_MISO      PTB23
+#define SPI_MASTER_SS        PTE25
+#define SPI_MASTER_CLK       PTD12
 #elif (BUILD_TYPE == BUILD_SLAVE)
-
-#define SPI_SLAVE_MOSI       PE_6
-#define SPI_SLAVE_MISO       PE_5
-#define SPI_SLAVE_SS         PE_4
-#define SPI_SLAVE_CLK        PE_2
-#if 0
 #define SPI_SLAVE_MOSI      PTD3
 #define SPI_SLAVE_MISO      PTD2
 #define SPI_SLAVE_SS        PTD0
 #define SPI_SLAVE_CLK       PTD1
-#endif
 #endif
 
 /* Set to enable debug prints.
@@ -249,7 +242,7 @@ static uint32_t sync_async_transfer(spi_t *obj, const void *tx, uint32_t tx_len,
 /* Array witch test cases which represents different SPI configurations for testing. */
 static config_test_case_t test_cases[] = {
         /* default config: 8 bit symbol\sync mode\full duplex\clock idle low\sample on the first clock edge\MSB first\100 KHz clock\automatic SS handling */
-/* 00 */{8, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE    , SPI_BIT_ORDERING_MSB_FIRST, FREQ_200KHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , true , FULL_DUPLEX  },
+/* 00 */{8, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE    , SPI_BIT_ORDERING_MSB_FIRST, FREQ_200KHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , false, FULL_DUPLEX, true  },
         /* symbol size testing */
 /* 01 */{1  , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_200KHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , true , FULL_DUPLEX  },
 /* 02 */{7  , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_200KHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , true , FULL_DUPLEX  },
@@ -800,15 +793,16 @@ int main()
 
     while (true) {
         spi_init(&spi_slave, true, SPI_SLAVE_MOSI, SPI_SLAVE_MISO, SPI_SLAVE_CLK, SPI_SLAVE_SS);
-printf("--> 1 \r\n");
+        printf("--> 1 \r\n");
         spi_format(&spi_slave, 8, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, SPI_BIT_ORDERING_MSB_FIRST);
-printf("--> 2 \r\n");
+        printf("--> 2 \r\n");
         config_test_case_t config = { 0 };
-printf("--> 3 \r\n");
-        spi_transfer(&spi_slave, NULL, 0, &config, CONFIG_LEN, &fill_symbol);
-printf("--> 4 \r\n");
+        printf("--> 3 \r\n");
+        uint8_t buf[CONFIG_LEN];
+        spi_transfer(&spi_slave, &buf, CONFIG_LEN, &config, CONFIG_LEN, &fill_symbol);
+        printf("--> 4 \r\n");
         dump_config(&config);
-printf("--> 5 \r\n");
+        printf("--> 5 \r\n");
         if (check_capabilities(&capabilities, config.symbol_size, true, config.duplex)
 #ifndef DEVICE_SPI_ASYNCH
         && config.sync
@@ -817,9 +811,9 @@ printf("--> 5 \r\n");
             status = CONFIG_STATUS_OK;
             PinName miso = SPI_SLAVE_MISO;
             PinName mosi = SPI_SLAVE_MOSI;
-printf("--> 6 \r\n");
+
             spi_transfer(&spi_slave, &status, CONFIG_STATUS_LEN, NULL, 0, (void*) &fill_symbol);
-printf("--> 7 \r\n");
+
             spi_free(&spi_slave);
 
             /* Adapt Full duplex/Half duplex settings. */

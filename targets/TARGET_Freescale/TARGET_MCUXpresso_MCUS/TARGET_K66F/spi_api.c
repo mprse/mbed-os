@@ -18,7 +18,7 @@
 
 #include "spi_api.h"
 
-#if DEVICE_SPI
+#if 1
 
 #include "cmsis.h"
 #include "pinmap.h"
@@ -239,6 +239,8 @@ static void spi_irq_handler(spi_t *obj) {
     if (obj->handler != NULL) {
         obj->transfered = obj->transfering;
 
+        //my_log(0, 0, 0, 0, 0);
+
         if ((obj->pending.rx != NULL) || (obj->pending.tx != NULL)) {
             //my_log(0, obj->is_slave, (uint32_t)obj->pending.rx, (uint32_t)obj->pending.tx, 2);
             //my_log(0, obj->is_slave, obj->pending.rx_len, obj->pending.tx_len, 3);
@@ -339,7 +341,8 @@ uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
         }
 
         // wait for the end !
-        while (!obj->done);
+        while (!obj->done) {
+        }
     }
 
     return total;

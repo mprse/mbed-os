@@ -11,6 +11,11 @@
 
 #define TEST_SYM_CNT 5
 
+#define TRANSMISSION_DELAY_MS 100
+#define TRANSMISSION_BUTTON SW3
+
+DigitalOut led(LED2);
+
 #define DEBUG 0
 
 #define CMDLINE_RETCODE_TEST_NOT_SUPPORTED      -100
@@ -52,6 +57,19 @@ static void set_buffer(void * addr, uint32_t size, char val)
 
     for (uint32_t i = 0; i < size; i++) {
         p_char[i] = val;
+    }
+}
+
+/* Function waits before the transmission is triggered on the master side. */
+static void wait_before_transmission()
+{
+    if (TRANSMISSION_DELAY_MS) {
+        wait_ms(TRANSMISSION_DELAY_MS);
+    } else {
+        DigitalIn button(TRANSMISSION_BUTTON);
+
+        while (button.read() == 1);
+        while (button.read() == 0);
     }
 }
 
@@ -123,7 +141,7 @@ int slave_transfer(spi_t *obj, config_test_case_t *config)
 
     set_buffer(rx_buff, sizeof(rx_buff), 0x00);
 
-    set_buffer(&fill_symbol, sizeof(fill_symbol), 0xFF);
+    set_buffer(&fill_symbol, sizeof(fill_symbol), 0xAB);
 
     void *p_tx_buff = tx_buff;
     void *p_rx_buff = rx_buff;
@@ -136,8 +154,10 @@ int slave_transfer(spi_t *obj, config_test_case_t *config)
         p_rx_buff = NULL;
     }
 
+    wait_before_transmission();
+    led = 1;
     count = sync_async_transfer(obj, p_tx_buff, config->slave_tx_cnt, p_rx_buff, config->slave_rx_cnt, &fill_symbol, config->sync);
-
+    led = 0;
     if (clocked_symbols_1 != count) {
         status = CMDLINE_RETCODE_TEST_FAILED;
     }
@@ -149,6 +169,7 @@ int slave_transfer(spi_t *obj, config_test_case_t *config)
 
     set_buffer(rx_buff, sizeof(rx_buff), 0x00);
 
+    wait_before_transmission();
     count = sync_async_transfer(obj, p_tx_buff, TEST_SYM_CNT, p_rx_buff, TEST_SYM_CNT, &fill_symbol, config->sync);
 
     if (clocked_symbols_2 != count) {
@@ -178,7 +199,7 @@ void dump_config(config_test_case_t *config)
     printf("master rx defined: %lu\r\n", (uint32_t) config->master_rx_defined);
     printf("slave tx defined: %lu\r\n", (uint32_t) config->slave_tx_defined);
     printf("slave rx defined: %lu\r\n", (uint32_t) config->slave_rx_defined);
-    printf("auto ss: %lu\r\n", (uint32_t) config->slave_rx_defined);
+    printf("auto ss: %lu\r\n", (uint32_t) config->auto_ss);
     printf("full duplex: %lu\r\n", (uint32_t) config->duplex);
     printf("log time: %lu [us]\r\n", (uint32_t) tim.read_us());
     printf("---\r\n");
@@ -186,12 +207,11 @@ void dump_config(config_test_case_t *config)
 #endif
 }
 
-int test_transfer_slave(config_test_case_t *config)
+int test_init_slave(spi_t * obj, config_test_case_t *config)
 {
-    int status = CMDLINE_RETCODE_SUCCESS;
-    spi_t spi_slave = { 0 };
-    uint8_t fill_symbol = 0xFF;
     spi_capabilities_t capabilities = { 0 };
+
+    led = 0;
 
     spi_get_capabilities(spi_get_module(SPI_SLAVE_MOSI,
                                         SPI_SLAVE_MISO,
@@ -214,23 +234,34 @@ int test_transfer_slave(config_test_case_t *config)
             break;
 
         default:
-
             break;
     }
+    spi_init(obj, true, mosi, miso, SPI_SLAVE_CLK, SPI_SLAVE_SS);
 
-    spi_init(&spi_slave, true, mosi, miso, SPI_SLAVE_CLK, SPI_SLAVE_SS);
+    spi_format(obj, config->symbol_size, config->mode, config->bit_ordering);
 
-    spi_format(&spi_slave, config->symbol_size, config->mode, config->bit_ordering);
+    return CMDLINE_RETCODE_SUCCESS;
+}
+
+int test_transfer_slave(spi_t * obj,config_test_case_t *config)
+{
+    int status = CMDLINE_RETCODE_SUCCESS;
 
     if (config->symbol_size <= 8) {
-        status = slave_transfer<uint8_t>(&spi_slave, config);
+        status = slave_transfer<uint8_t>(obj, config);
     } else if (config->symbol_size <= 16) {
-        status = slave_transfer<uint16_t>(&spi_slave, config);
+        status = slave_transfer<uint16_t>(obj, config);
     } else {
-        status = slave_transfer<uint16_t>(&spi_slave, config);
+        status = slave_transfer<uint16_t>(obj, config);
     }
-
-    spi_free(&spi_slave);
 
     return status;
 }
+
+int test_finish_slave(spi_t * obj, config_test_case_t *config)
+{
+    spi_free(obj);
+
+    return CMDLINE_RETCODE_SUCCESS;
+}
+

@@ -32,11 +32,12 @@
 #define mbed_console_concat(x) mbed_console_concat_(x)
 #define CONSOLE_FLOWCONTROL mbed_console_concat(MBED_CONF_TARGET_CONSOLE_UART_FLOW_CONTROL)
 
-DigitalOut led(LED1);
 
 #define SERIAL_CONSOLE_BAUD_RATE 115200
 
 static config_test_case_t tc_config;
+static spi_t spi_master = { 0 };
+static DigitalOut *ss = NULL;
 
 void cmd_ready_cb(int retcode)
 {
@@ -54,8 +55,10 @@ int validate_config_callback(int argc, char *argv[])
     spi_get_capabilities(spi_get_module(SPI_MASTER_MOSI, SPI_MASTER_MISO, SPI_MASTER_CLK), NC, &capabilities);
 
     int32_t duplex_buf;
+    int32_t mode_buf;
 
     cmd_parameter_int(argc, argv, "symbol_size", (int32_t*)&tc_config.symbol_size);
+    cmd_parameter_int(argc, argv, "mode", &mode_buf);
     cmd_parameter_int(argc, argv, "bit_ordering", (int32_t*)&tc_config.bit_ordering);
     cmd_parameter_int(argc, argv, "freq_hz", (int32_t*)&tc_config.freq_hz);
     cmd_parameter_int(argc, argv, "master_tx_cnt", (int32_t*)&tc_config.master_tx_cnt);
@@ -70,6 +73,7 @@ int validate_config_callback(int argc, char *argv[])
     cmd_parameter_int(argc, argv, "duplex", &duplex_buf);
     cmd_parameter_bool(argc, argv, "sync", &tc_config.sync);
     tc_config.duplex = (duplex_t)duplex_buf;
+    tc_config.mode = (_spi_mode_t)mode_buf;
 
     //dump_config(&tc_config);
 
@@ -78,19 +82,36 @@ int validate_config_callback(int argc, char *argv[])
     return check_capabilities(&capabilities, tc_config.symbol_size, false, tc_config.duplex);
 }
 
+int init_test_callback(int argc, char *argv[])
+{
+    int result = test_init_master(&spi_master, &tc_config, &ss);
+
+    return result;
+}
+
 int exec_test_callback(int argc, char *argv[])
 {
-    return test_transfer_master(&tc_config);
+    int result = test_transfer_master(&spi_master, &tc_config, ss);
+
+    return result;
+}
+
+int finish_test_callback(int argc, char *argv[])
+{
+    int result = test_finish_master(&spi_master, &tc_config);
+
+    return result;
 }
 
 int main()
 {
-    led = 0;
+    osThreadSetPriority(osThreadGetId(), osPriorityIdle);
 
     cmd_init(&wrap_printf);
     cmd_add("validate_config", validate_config_callback, 0, 0);
+    cmd_add("init_test", init_test_callback, 0, 0);
     cmd_add("exec_test", exec_test_callback, 0, 0);
-
+    cmd_add("finish_test", finish_test_callback, 0, 0);
 
     int c;
     while ((c = getchar()) != EOF) {
@@ -111,3 +132,4 @@ FileHandle *mbed::mbed_override_console(int)
 #endif
     return &console;
 }
+

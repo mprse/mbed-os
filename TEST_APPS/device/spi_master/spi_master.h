@@ -1,7 +1,9 @@
-#define SPI_MASTER_MOSI      PTD2
-#define SPI_MASTER_MISO      PTD3
-#define SPI_MASTER_SS        PTD0
-#define SPI_MASTER_CLK       PTD1
+#include <Thread.h>
+
+#define SPI_MASTER_MOSI      PTD13
+#define SPI_MASTER_MISO      PTB23
+#define SPI_MASTER_SS        PTE25
+#define SPI_MASTER_CLK       PTD12
 
 #define FREQ_200KHZ (200000)
 #define FREQ_1MHZ   (1000000)
@@ -11,13 +13,17 @@
 
 #define TEST_SYM_CNT 5
 
-#define TRANSMISSION_DELAY_MS 3000
+#define TRANSMISSION_DELAY_MS 1000
 #define TRANSMISSION_BUTTON SW3
 
 #define CMDLINE_RETCODE_TEST_NOT_SUPPORTED      -100
 #define CMDLINE_RETCODE_TEST_FAILED             -101
 
 #define DEBUG 1
+
+unsigned int counter = 0;
+
+DigitalOut led(LED1);
 
 typedef enum
 {
@@ -43,6 +49,42 @@ typedef struct
     duplex_t duplex;
     bool sync;
 } config_test_case_t;
+
+template<typename T>
+static void dump_buffers(T *tx_pattern, T *rx1_pattern, T *rx2_pattern, T *tx_buff, T *rx_buff)
+{
+#if DEBUG
+    printf("Dump buffers: \n");
+    printf("tx_pattern : 0x%X 0x%X 0x%X 0x%X 0x%X \r\n", tx_pattern[0], tx_pattern[1], tx_pattern[2], tx_pattern[3], tx_pattern[4]);
+    printf("rx1_pattern: 0x%X 0x%X 0x%X 0x%X 0x%X \r\n", rx1_pattern[0], rx1_pattern[1], rx1_pattern[2], rx1_pattern[3], rx1_pattern[4]);
+    printf("rx2_pattern: 0x%X 0x%X 0x%X 0x%X 0x%X \r\n", rx2_pattern[0], rx2_pattern[1], rx2_pattern[2], rx2_pattern[3], rx2_pattern[4]);
+    printf("tx_buff    : 0x%X 0x%X 0x%X 0x%X 0x%X \r\n", tx_buff[0], tx_buff[1], tx_buff[2], tx_buff[3], tx_buff[4]);
+    printf("rx_buff    : 0x%X 0x%X 0x%X 0x%X 0x%X \r\n", rx_buff[0], rx_buff[1], rx_buff[2], rx_buff[3], rx_buff[4]);
+#endif
+}
+
+/* Debug function to print received configuration details. */
+void dump_config(config_test_case_t *config)
+{
+#if 0
+    printf("TEST CASE CONFIGURATION\r\n");
+    printf("symbol_size: %lu\r\n", (uint32_t) config->symbol_size);
+    printf("spi_mode: %lu\r\n", (uint32_t) config->mode);
+    printf("bit_ordering: %lu\r\n", (uint32_t) config->bit_ordering);
+    printf("freq: %lu\r\n", (uint32_t) config->freq_hz);
+    printf("master tx cnt: %lu\r\n", (uint32_t) config->master_tx_cnt);
+    printf("master rx cnt: %lu\r\n", (uint32_t) config->master_rx_cnt);
+    printf("slave tx cnt: %lu\r\n", (uint32_t) config->slave_tx_cnt);
+    printf("slave rx cnt: %lu\r\n", (uint32_t) config->slave_rx_cnt);
+    printf("master tx defined: %lu\r\n", (uint32_t) config->master_tx_defined);
+    printf("master rx defined: %lu\r\n", (uint32_t) config->master_rx_defined);
+    printf("slave tx defined: %lu\r\n", (uint32_t) config->slave_tx_defined);
+    printf("slave rx defined: %lu\r\n", (uint32_t) config->slave_rx_defined);
+    printf("auto ss: %lu\r\n", (uint32_t) config->auto_ss);
+    printf("full duplex: %lu\r\n", (uint32_t) config->duplex);
+    printf("---\r\n");
+#endif
+}
 
 /* Function inits specified buffer with given pattern. */
 static void set_buffer(void * addr, uint32_t size, char val)
@@ -86,6 +128,7 @@ static uint32_t sync_async_transfer(spi_t *obj, const void *tx, uint32_t tx_len,
     uint32_t count = 0;
 
     if (sync_mode) {
+
         count = spi_transfer(obj, tx, tx_len, rx, rx_len, fill_symbol);
     }
 #ifdef DEVICE_SPI_ASYNCH
@@ -163,7 +206,7 @@ static void init_transmission_buffers(config_test_case_t *config, T *p_tx_patter
     set_buffer(&p_rx2_pattern[3], sizeof(T), 0xDD);
     set_buffer(&p_rx2_pattern[4], sizeof(T), 0xEE);
 
-    set_buffer(p_fill_symbol, sizeof(T), 0xFF);
+    set_buffer(p_fill_symbol, sizeof(T), 0xAB);
 
     /* Exception: master TX > master RX . */
     if (config->master_tx_cnt > config->master_rx_cnt) {
@@ -260,50 +303,9 @@ static void handle_ss(DigitalOut * ss, bool select)
     }
 }
 
-template<typename T>
-static void dump_buffers(T *tx_pattern, T *rx1_pattern, T *rx2_pattern, T *tx_buff, T *rx_buff)
-{
-#if DEBUG
-    printf("Dump buffers: \n");
-    printf("tx_pattern : 0x%X 0x%X 0x%X 0x%X 0x%X \n", tx_pattern[0], tx_pattern[1], tx_pattern[2], tx_pattern[3], tx_pattern[4]);
-    printf("rx1_pattern: 0x%X 0x%X 0x%X 0x%X 0x%X \n", rx1_pattern[0], rx1_pattern[1], rx1_pattern[2], rx1_pattern[3], rx1_pattern[4]);
-    printf("rx2_pattern: 0x%X 0x%X 0x%X 0x%X 0x%X \n", rx2_pattern[0], rx2_pattern[1], rx2_pattern[2], rx2_pattern[3], rx2_pattern[4]);
-    printf("tx_buff    : 0x%X 0x%X 0x%X 0x%X 0x%X \n", tx_buff[0], tx_buff[1], tx_buff[2], tx_buff[3], tx_buff[4]);
-    printf("rx_buff    : 0x%X 0x%X 0x%X 0x%X 0x%X \n", rx_buff[0], rx_buff[1], rx_buff[2], rx_buff[3], rx_buff[4]);
-#endif
-}
-
-/* Debug function to print received configuration details. */
-void dump_config(config_test_case_t *config)
-{
-#if DEBUG
-    Timer tim;
-    tim.reset();
-    tim.start();
-    printf("TEST CASE CONFIGURATION\r\n");
-    printf("symbol_size: %lu\r\n", (uint32_t) config->symbol_size);
-    printf("spi_mode: %lu\r\n", (uint32_t) config->mode);
-    printf("bit_ordering: %lu\r\n", (uint32_t) config->bit_ordering);
-    printf("freq: %lu\r\n", (uint32_t) config->freq_hz);
-    printf("master tx cnt: %lu\r\n", (uint32_t) config->master_tx_cnt);
-    printf("master rx cnt: %lu\r\n", (uint32_t) config->master_rx_cnt);
-    printf("slave tx cnt: %lu\r\n", (uint32_t) config->slave_tx_cnt);
-    printf("slave rx cnt: %lu\r\n", (uint32_t) config->slave_rx_cnt);
-    printf("master tx defined: %lu\r\n", (uint32_t) config->master_tx_defined);
-    printf("master rx defined: %lu\r\n", (uint32_t) config->master_rx_defined);
-    printf("slave tx defined: %lu\r\n", (uint32_t) config->slave_tx_defined);
-    printf("slave rx defined: %lu\r\n", (uint32_t) config->slave_rx_defined);
-    printf("auto ss: %lu\r\n", (uint32_t) config->slave_rx_defined);
-    printf("full duplex: %lu\r\n", (uint32_t) config->duplex);
-    printf("log time: %lu [us]\r\n", (uint32_t) tim.read_us());
-    printf("---\r\n");
-    tim.stop();
-#endif
-}
-
 /* Function which perform transfer using specified config on the master side. */
 template<typename T>
-int transfer_master(spi_t *obj, config_test_case_t *config, DigitalOut *ss_pin)
+int transfer_master(spi_t *obj, config_test_case_t *config, DigitalOut *ss)
 {
     uint32_t count;
     int status = CMDLINE_RETCODE_SUCCESS;
@@ -335,12 +337,13 @@ int transfer_master(spi_t *obj, config_test_case_t *config, DigitalOut *ss_pin)
 
     init_transmission_buffers<T>(config, &tx_pattern[0], &rx1_pattern[0], &rx2_pattern[0], &tx_buff[0], &rx_buff[0], &fill_symbol);
 
-    dump_buffers<T>(tx_pattern, rx1_pattern, rx2_pattern, tx_buff, rx_buff);
+    //dump_buffers<T>(tx_pattern, rx1_pattern, rx2_pattern, tx_buff, rx_buff);
 
     wait_before_transmission();
-    handle_ss(ss_pin, true);
+    led = 1;
+    handle_ss(ss, true);
     count = sync_async_transfer(obj, p_tx_buff, config->master_tx_cnt, p_rx_buff, config->master_rx_cnt, (void*) &fill_symbol, config->sync);
-    handle_ss(ss_pin, false);
+    handle_ss(ss, false);
 
     if (!check_buffers(rx1_pattern, p_rx_buff, sizeof(T) * TEST_SYM_CNT) ||
         !check_buffers(tx_pattern, p_tx_buff, sizeof(T) * TEST_SYM_CNT) ||
@@ -359,9 +362,9 @@ int transfer_master(spi_t *obj, config_test_case_t *config, DigitalOut *ss_pin)
     set_buffer(rx_buff, sizeof(rx_buff), 0x00);
 
     wait_before_transmission();
-    handle_ss(ss_pin, true);
+    handle_ss(ss, true);
     count = sync_async_transfer(obj, tx_buff, TEST_SYM_CNT, rx_buff, TEST_SYM_CNT, (void*) &fill_symbol, config->sync);
-    handle_ss(ss_pin, false);
+    handle_ss(ss, false);
 
     if (!check_buffers(rx2_pattern, p_rx_buff, sizeof(T) * TEST_SYM_CNT) ||
         !check_buffers(tx_pattern, p_tx_buff, sizeof(T) * TEST_SYM_CNT) ||
@@ -370,18 +373,19 @@ int transfer_master(spi_t *obj, config_test_case_t *config, DigitalOut *ss_pin)
         dump_buffers<T>(tx_pattern, rx1_pattern, rx2_pattern, tx_buff, rx_buff);
     }
 
+    //dump_buffers<T>(tx_pattern, rx1_pattern, rx2_pattern, tx_buff, rx_buff);
+
     return status;
 }
 
-int test_transfer_master(config_test_case_t *config)
+int test_init_master(spi_t * obj, config_test_case_t *config, DigitalOut ** ss)
 {
-    int status;
-    spi_t spi_master = { 0 };
     spi_capabilities_t capabilities = { 0 };
-    PinName ss = SPI_MASTER_SS;
+    PinName ss_pin = SPI_MASTER_SS;
     PinName miso = SPI_MASTER_MISO;
     PinName mosi = SPI_MASTER_MOSI;
-    DigitalOut *ss_pin = NULL;
+
+
 
     spi_get_capabilities(spi_get_module(SPI_MASTER_MOSI, SPI_MASTER_MISO, SPI_MASTER_CLK), NC, &capabilities);
 
@@ -417,27 +421,41 @@ int test_transfer_master(config_test_case_t *config)
 
     /* Adapt manual/auto SS handling by master. */
     if (!config->auto_ss) {
-        ss_pin = new DigitalOut(SPI_MASTER_SS);
-        ss = NC;
-        *ss_pin = 1;
+        ss_pin = NC;
+        *ss = new DigitalOut(SPI_MASTER_SS);
+        **ss = 1;
     }
 
-    spi_init(&spi_master, false, mosi, miso, SPI_MASTER_CLK, ss);
+    led = 0;
 
-    spi_format(&spi_master, config->symbol_size, config->mode, config->bit_ordering);
+    spi_init(obj, false, mosi, miso, SPI_MASTER_CLK, ss_pin);
 
-    spi_frequency(&spi_master, config->freq_hz);
+    spi_format(obj, config->symbol_size, config->mode, config->bit_ordering);
+
+    spi_frequency(obj, config->freq_hz);
+
+    return CMDLINE_RETCODE_SUCCESS;
+}
+
+int test_transfer_master(spi_t * obj, config_test_case_t *config, DigitalOut * ss)
+{
+    int status = CMDLINE_RETCODE_SUCCESS;
 
     if (config->symbol_size <= 8) {
-        status = transfer_master<uint8_t>(&spi_master, config, ss_pin);
+        status = transfer_master<uint8_t>(obj, config, ss);
     } else if (config->symbol_size <= 16) {
-        status = transfer_master<uint16_t>(&spi_master,config, ss_pin);
+        status = transfer_master<uint16_t>(obj,config, ss);
     } else {
-        status = transfer_master<uint32_t>(&spi_master,config, ss_pin);
+        status = transfer_master<uint32_t>(obj,config, ss);
     }
 
-    spi_free(&spi_master);
-
     return status;
+}
+
+int test_finish_master(spi_t * obj, config_test_case_t *config)
+{
+    spi_free(obj);
+
+    return CMDLINE_RETCODE_SUCCESS;
 }
 

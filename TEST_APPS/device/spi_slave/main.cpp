@@ -35,8 +35,7 @@
 #define SERIAL_CONSOLE_BAUD_RATE 115200
 
 static config_test_case_t tc_config;
-
-DigitalOut led(LED2);
+static spi_t spi_slave = { 0 };
 
 void cmd_ready_cb(int retcode)
 {
@@ -54,8 +53,10 @@ int validate_config_callback(int argc, char *argv[])
     spi_get_capabilities(spi_get_module(SPI_SLAVE_MOSI, SPI_SLAVE_MISO, SPI_SLAVE_CLK), NC, &capabilities);
 
     int32_t duplex_buf;
+    int32_t mode_buf;
 
     cmd_parameter_int(argc, argv, "symbol_size", (int32_t*)&tc_config.symbol_size);
+    cmd_parameter_int(argc, argv, "mode", &mode_buf);
     cmd_parameter_int(argc, argv, "bit_ordering", (int32_t*)&tc_config.bit_ordering);
     cmd_parameter_int(argc, argv, "freq_hz", (int32_t*)&tc_config.freq_hz);
     cmd_parameter_int(argc, argv, "master_tx_cnt", (int32_t*)&tc_config.master_tx_cnt);
@@ -70,24 +71,45 @@ int validate_config_callback(int argc, char *argv[])
     cmd_parameter_int(argc, argv, "duplex", &duplex_buf);
     cmd_parameter_bool(argc, argv, "sync", &tc_config.sync);
     tc_config.duplex = (duplex_t)duplex_buf;
+    tc_config.mode = (_spi_mode_t)mode_buf;
 
     dump_config(&tc_config);
 
     return check_capabilities(&capabilities, tc_config.symbol_size, true, tc_config.duplex);
 }
 
+int init_test_callback(int argc, char *argv[])
+{
+    int result = test_init_slave(&spi_slave, &tc_config);
+
+    return result;
+}
+
 int exec_test_callback(int argc, char *argv[])
 {
-    return test_transfer_slave(&tc_config);
+    int result = test_transfer_slave(&spi_slave, &tc_config);
+
+    return result;
+}
+
+int finish_test_callback(int argc, char *argv[])
+{
+    int result = test_finish_slave(&spi_slave, &tc_config);
+
+    return result;
 }
 
 int main()
 {
     led = 0;
 
+    osThreadSetPriority(osThreadGetId(), osPriorityIdle);
+
     cmd_init(&wrap_printf);
     cmd_add("validate_config", validate_config_callback, 0, 0);
+    cmd_add("init_test", init_test_callback, 0, 0);
     cmd_add("exec_test", exec_test_callback, 0, 0);
+    cmd_add("finish_test", finish_test_callback, 0, 0);
 
     int c;
     while ((c = getchar()) != EOF) {
@@ -108,3 +130,4 @@ FileHandle *mbed::mbed_override_console(int)
 #endif
     return &console;
 }
+
