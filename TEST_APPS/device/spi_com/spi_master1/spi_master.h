@@ -1,20 +1,9 @@
-/*
- * Copyright (c) 2018 ARM Limited. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
- * Licensed under the Apache License, Version 2.0 (the License); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an AS IS BASIS, WITHOUT
- * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-#include "mbed_config.h"
-#include "../spi_config/spi_test_common.h"
+#include <Thread.h>
+
+#define SPI_MASTER_MOSI      PTD13
+#define SPI_MASTER_MISO      PTB23
+#define SPI_MASTER_SS        PTE25
+#define SPI_MASTER_CLK       PTD12
 
 #define FREQ_200KHZ (200000)
 #define FREQ_1MHZ   (1000000)
@@ -25,9 +14,11 @@
 #define TEST_SYM_CNT 5
 
 #define TRANSMISSION_DELAY_MS 1000
-#define TRANSMISSION_BUTTON NC
+#define TRANSMISSION_BUTTON SW3
 
-#define DEBUG MBED_CONF_APP_SPI_MASTER_DEBUG
+#define DEBUG 0
+
+unsigned int counter = 0;
 
 DigitalOut led(LED1);
 
@@ -117,15 +108,11 @@ void spi_async_callback(spi_t *obj, void *ctx, spi_async_event_t *event) {
 
 /* Function returns true if configuration is consistent with the capabilities of
  * the SPI peripheral, false otherwise. */
-static int check_capabilities(uint32_t symbol_size, bool slave, bool half_duplex, bool sync_mode)
+static int check_capabilities(spi_capabilities_t *p_cabs, uint32_t symbol_size, bool slave, bool half_duplex, bool sync_mode)
 {
-    spi_capabilities_t capabilities = { 0 };
-    spi_get_capabilities(spi_get_module(MBED_CONF_APP_SPI_MASTER_MOSI, MBED_CONF_APP_SPI_MASTER_MISO, MBED_CONF_APP_SPI_MASTER_CLK), NC, &capabilities);
-
-
-    if (!(capabilities.word_length & (1 << (symbol_size - 1))) ||
-         (slave && !capabilities.support_slave_mode) ||
-         (half_duplex && !capabilities.half_duplex)
+    if (!(p_cabs->word_length & (1 << (symbol_size - 1))) ||
+         (slave && !p_cabs->support_slave_mode) ||
+         (half_duplex && !p_cabs->half_duplex)
 #ifndef DEVICE_SPI_ASYNCH
             || (!sync_mode)
 #endif
@@ -420,11 +407,11 @@ int transfer_master(spi_t *obj, config_test_case_t *config, DigitalOut *ss)
 int test_init_master(spi_t * obj, config_test_case_t *config, DigitalOut ** ss)
 {
     spi_capabilities_t capabilities = { 0 };
-    PinName ss_pin = MBED_CONF_APP_SPI_MASTER_CS;
-    PinName miso = MBED_CONF_APP_SPI_MASTER_MISO;
-    PinName mosi = MBED_CONF_APP_SPI_MASTER_MOSI;
+    PinName ss_pin = SPI_MASTER_SS;
+    PinName miso = SPI_MASTER_MISO;
+    PinName mosi = SPI_MASTER_MOSI;
 
-    spi_get_capabilities(spi_get_module(MBED_CONF_APP_SPI_MASTER_MOSI, MBED_CONF_APP_SPI_MASTER_MISO, MBED_CONF_APP_SPI_MASTER_CLK), NC, &capabilities);
+    spi_get_capabilities(spi_get_module(SPI_MASTER_MOSI, SPI_MASTER_MISO, SPI_MASTER_CLK), NC, &capabilities);
 
     /* Adapt Full Duplex/Half Duplex settings. */
     switch (config->duplex)
@@ -459,13 +446,13 @@ int test_init_master(spi_t * obj, config_test_case_t *config, DigitalOut ** ss)
     /* Adapt manual/auto SS handling by master. */
     if (!config->auto_ss) {
         ss_pin = NC;
-        *ss = new DigitalOut(MBED_CONF_APP_SPI_MASTER_CS);
+        *ss = new DigitalOut(SPI_MASTER_SS);
         **ss = 1;
     }
 
     led = 0;
 
-    spi_init(obj, false, mosi, miso, MBED_CONF_APP_SPI_MASTER_CLK, ss_pin);
+    spi_init(obj, false, mosi, miso, SPI_MASTER_CLK, ss_pin);
 
     spi_format(obj, config->symbol_size, config->mode, config->bit_ordering);
 

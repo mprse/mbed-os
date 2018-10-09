@@ -83,12 +83,12 @@ test_cases = [  # default config: 8 bit symbol\sync mode\full duplex\clock idle 
 class Testcase(Bench):
     def __init__(self):
         Bench.__init__(self,
-                       name="spi_com_test",
-                       title="Smoke test for command line interface",
+                       name="test_spi_com",
+                       title="SPI Communication Test",
                        status="released",
-                       purpose="Verify Command Line Interface",
-                       component=["cmdline"],
-                       type="smoke",
+                       purpose="Verify new SPI HAL API",
+                       component=["SPI"],
+                       type="compatibility",
                        requirements={
                            "duts": {
                                '*': {

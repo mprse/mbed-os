@@ -51,6 +51,9 @@ void wrap_printf(const char *f, va_list a)
 
 int validate_config_callback(int argc, char *argv[])
 {
+    spi_capabilities_t capabilities = { 0 };
+    spi_get_capabilities(spi_get_module(SPI_MASTER_MOSI, SPI_MASTER_MISO, SPI_MASTER_CLK), NC, &capabilities);
+
     int32_t duplex_buf;
     int32_t mode_buf;
 
@@ -74,7 +77,7 @@ int validate_config_callback(int argc, char *argv[])
 
     dump_config(&tc_config);
 
-    return check_capabilities(tc_config.symbol_size, false, tc_config.duplex, tc_config.sync);
+    return check_capabilities(&capabilities, tc_config.symbol_size, false, tc_config.duplex, tc_config.sync);
 }
 
 int init_test_callback(int argc, char *argv[])

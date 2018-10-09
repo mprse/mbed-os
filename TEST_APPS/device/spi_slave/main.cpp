@@ -17,7 +17,7 @@
 #include <stdarg.h>
 #include "mbed.h"
 #include "mbed-client-cli/ns_cmdline.h"
-#include "slave_lib.h"
+#include "spi_slave.h"
 
 #ifndef ICETEA_EXAMPLE_ENABLED
 #error [NOT_SUPPORTED] Skipping example application.
@@ -49,9 +49,6 @@ void wrap_printf(const char *f, va_list a)
 
 int validate_config_callback(int argc, char *argv[])
 {
-    spi_capabilities_t capabilities = { 0 };
-    spi_get_capabilities(spi_get_module(SPI_SLAVE_MOSI, SPI_SLAVE_MISO, SPI_SLAVE_CLK), NC, &capabilities);
-
     int32_t duplex_buf;
     int32_t mode_buf;
 
@@ -75,7 +72,7 @@ int validate_config_callback(int argc, char *argv[])
 
     dump_config(&tc_config);
 
-    return check_capabilities(&capabilities, tc_config.symbol_size, true, tc_config.duplex);
+    return check_capabilities(tc_config.symbol_size, true, tc_config.duplex, tc_config.sync);
 }
 
 int init_test_callback(int argc, char *argv[])

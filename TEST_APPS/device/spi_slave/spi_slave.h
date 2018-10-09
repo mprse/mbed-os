@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 #include "mbed_config.h"
-#include "../spi_config/spi_test_common.h"
 
 #define FREQ_200KHZ (200000)
 #define FREQ_1MHZ   (1000000)
@@ -24,12 +23,15 @@
 
 #define TEST_SYM_CNT 5
 
-#define TRANSMISSION_DELAY_MS 1000
+#define TRANSMISSION_DELAY_MS 100
 #define TRANSMISSION_BUTTON NC
 
-#define DEBUG MBED_CONF_APP_SPI_MASTER_DEBUG
+DigitalOut led(LED2);
 
-DigitalOut led(LED1);
+#define DEBUG MBED_CONF_APP_SPI_SLAVE_DEBUG
+
+#define CMDLINE_RETCODE_TEST_NOT_SUPPORTED      -100
+#define CMDLINE_RETCODE_TEST_FAILED             -101
 
 typedef enum
 {
@@ -59,9 +61,9 @@ typedef struct
 template<typename T>
 static void dump_buffers(T *tx_pattern, T *rx1_pattern, T *rx2_pattern, T *tx_buff, T *rx_buff)
 {
-    typedef unsigned int u32;
 #if DEBUG
-    printf("Master - buffers dump: \r\n");
+    typedef unsigned int u32;
+    printf("Slave - buffers dump: \r\n");
     printf("tx_pattern : 0x%X 0x%X 0x%X 0x%X 0x%X \r\n", (u32) tx_pattern[0], (u32) tx_pattern[1], (u32) tx_pattern[2], (u32) tx_pattern[3], (u32) tx_pattern[4]);
     printf("rx1_pattern: 0x%X 0x%X 0x%X 0x%X 0x%X \r\n", (u32) rx1_pattern[0], (u32) rx1_pattern[1], (u32) rx1_pattern[2], (u32) rx1_pattern[3], (u32) rx1_pattern[4]);
     printf("rx2_pattern: 0x%X 0x%X 0x%X 0x%X 0x%X \r\n", (u32) rx2_pattern[0], (u32) rx2_pattern[1], (u32) rx2_pattern[2], (u32) rx2_pattern[3], (u32) rx2_pattern[4]);
@@ -106,74 +108,6 @@ static void set_buffer(void * addr, uint32_t size, char val)
     }
 }
 
-#ifdef DEVICE_SPI_ASYNCH
-/* Callback function for SPI async transfers. */
-static uint32_t context;
-void spi_async_callback(spi_t *obj, void *ctx, spi_async_event_t *event) {
-    *((uint32_t*)ctx) = event->transfered;
-}
-#endif
-
-
-/* Function returns true if configuration is consistent with the capabilities of
- * the SPI peripheral, false otherwise. */
-static int check_capabilities(uint32_t symbol_size, bool slave, bool half_duplex, bool sync_mode)
-{
-    spi_capabilities_t capabilities = { 0 };
-    spi_get_capabilities(spi_get_module(MBED_CONF_APP_SPI_MASTER_MOSI, MBED_CONF_APP_SPI_MASTER_MISO, MBED_CONF_APP_SPI_MASTER_CLK), NC, &capabilities);
-
-
-    if (!(capabilities.word_length & (1 << (symbol_size - 1))) ||
-         (slave && !capabilities.support_slave_mode) ||
-         (half_duplex && !capabilities.half_duplex)
-#ifndef DEVICE_SPI_ASYNCH
-            || (!sync_mode)
-#endif
-            ) {
-        printf("SKIP: Configuration not supported by master.\r\n");
-    }
-
-    return CMDLINE_RETCODE_SUCCESS;
-}
-
-/* Function used to perform transmission using sync or async modes. */
-static uint32_t sync_async_transfer(spi_t *obj, const void *tx, uint32_t tx_len, void *rx, uint32_t rx_len, const void *fill_symbol, bool sync_mode)
-{
-    uint32_t count = 0;
-
-    if (sync_mode) {
-
-        count = spi_transfer(obj, tx, tx_len, rx, rx_len, fill_symbol);
-    }
-#ifdef DEVICE_SPI_ASYNCH
-    else {
-        context = 0;
-        spi_transfer_async(obj, tx, tx_len, rx, rx_len, fill_symbol, spi_async_callback, &context, DMA_USAGE_NEVER);
-
-        /* Wait here for the end of transmission. Callback will set context to the number of
-         * transfered symbols. */
-        while(!context);
-
-        count = context;
-    }
-#endif
-
-    return count;
-}
-
-/* Function waits before the transmission is triggered on the master side. */
-static void wait_before_transmission()
-{
-    if (TRANSMISSION_DELAY_MS) {
-        wait_ms(TRANSMISSION_DELAY_MS);
-    } else {
-        DigitalIn button(TRANSMISSION_BUTTON);
-
-        while (button.read() == 1);
-        while (button.read() == 0);
-    }
-}
-
 /* Function compares given buffers and returns true when equal, false otherwise.
  * In case when buffer is undefined (NULL) function returns true. */
 static bool check_buffers(void *p_pattern, void *p_buffer, uint32_t size)
@@ -197,77 +131,129 @@ static bool check_buffers(void *p_pattern, void *p_buffer, uint32_t size)
     return true;
 }
 
+/* Function waits before the transmission. */
+static void wait_before_transmission()
+{
+    if (TRANSMISSION_DELAY_MS) {
+        wait_ms(TRANSMISSION_DELAY_MS);
+    } else {
+        DigitalIn button(TRANSMISSION_BUTTON);
+
+        while (button.read() == 1);
+        while (button.read() == 0);
+    }
+}
+
+#ifdef DEVICE_SPI_ASYNCH
+/* Callback function for SPI async transfers. */
+static uint32_t context;
+void spi_async_callback(spi_t *obj, void *ctx, spi_async_event_t *event) {
+    *((uint32_t*)ctx) = event->transfered;
+}
+#endif
+
+/* Function returns true if configuration is consistent with the capabilities of
+ * the SPI peripheral, false otherwise. */
+static int check_capabilities(uint32_t symbol_size, bool slave, bool half_duplex, bool sync_mode)
+{
+    spi_capabilities_t capabilities = { 0 };
+    spi_get_capabilities(spi_get_module(MBED_CONF_APP_SPI_SLAVE_MOSI,
+                                        MBED_CONF_APP_SPI_SLAVE_MISO,
+                                        MBED_CONF_APP_SPI_SLAVE_CLK),
+                         MBED_CONF_APP_SPI_SLAVE_CS,
+                         &capabilities);
+
+    if (!(capabilities.word_length & (1 << (symbol_size - 1))) ||
+         (slave && !capabilities.support_slave_mode) ||
+         (half_duplex && !capabilities.half_duplex)
+#ifndef DEVICE_SPI_ASYNCH
+            || (!sync_mode)
+#endif
+            ) {
+        printf("SKIP: Configuration not supported by master.\r\n");
+    }
+
+    return CMDLINE_RETCODE_SUCCESS;
+}
+
+/* Function used to perform transmission using sync or async modes. */
+static uint32_t sync_async_transfer(spi_t *obj, const void *tx, uint32_t tx_len, void *rx, uint32_t rx_len, const void *fill_symbol, bool sync_mode)
+{
+    uint32_t count = 0;
+
+    if (sync_mode) {
+        count = spi_transfer(obj, tx, tx_len, rx, rx_len, fill_symbol);
+    }
+#ifdef DEVICE_SPI_ASYNCH
+    else {
+        context = 0;
+        bool ret = spi_transfer_async(obj, tx, tx_len, rx, rx_len, fill_symbol, spi_async_callback, &context, DMA_USAGE_NEVER);
+        /* Wait here for the end of transmission. Callback will set context to the number of
+         * transfered symbols. */
+        while(!context);
+
+        count = context;
+    }
+#endif
+
+    return count;
+}
+
 /* Function initialises RX, TX buffers before transmission. */
 template<typename T>
 static void init_transmission_buffers(config_test_case_t *config, T *p_tx_pattern, T *p_rx1_pattern, T *p_rx2_pattern, T *p_tx_buff, T *p_rx_buff, T *p_fill_symbol)
 {
     /* Default patterns for TX/RX buffers. */
-    set_buffer(&p_tx_pattern[0], sizeof(T), 0xAA);
-    set_buffer(&p_tx_pattern[1], sizeof(T), 0xBB);
-    set_buffer(&p_tx_pattern[2], sizeof(T), 0xCC);
-    set_buffer(&p_tx_pattern[3], sizeof(T), 0xDD);
-    set_buffer(&p_tx_pattern[4], sizeof(T), 0xEE);
+    set_buffer(&p_tx_pattern[0], sizeof(T), 0x11);
+    set_buffer(&p_tx_pattern[1], sizeof(T), 0x22);
+    set_buffer(&p_tx_pattern[2], sizeof(T), 0x33);
+    set_buffer(&p_tx_pattern[3], sizeof(T), 0x44);
+    set_buffer(&p_tx_pattern[4], sizeof(T), 0x55);
 
-    set_buffer(&p_rx1_pattern[0], sizeof(T), 0x11);
-    set_buffer(&p_rx1_pattern[1], sizeof(T), 0x22);
-    set_buffer(&p_rx1_pattern[2], sizeof(T), 0x33);
-    set_buffer(&p_rx1_pattern[3], sizeof(T), 0x44);
-    set_buffer(&p_rx1_pattern[4], sizeof(T), 0x55);
+    set_buffer(&p_rx1_pattern[0], sizeof(T), 0xAA);
+    set_buffer(&p_rx1_pattern[1], sizeof(T), 0xBB);
+    set_buffer(&p_rx1_pattern[2], sizeof(T), 0xCC);
+    set_buffer(&p_rx1_pattern[3], sizeof(T), 0xDD);
+    set_buffer(&p_rx1_pattern[4], sizeof(T), 0xEE);
 
-    set_buffer(&p_rx2_pattern[0], sizeof(T), 0xAA);
-    set_buffer(&p_rx2_pattern[1], sizeof(T), 0xBB);
-    set_buffer(&p_rx2_pattern[2], sizeof(T), 0xCC);
-    set_buffer(&p_rx2_pattern[3], sizeof(T), 0xDD);
-    set_buffer(&p_rx2_pattern[4], sizeof(T), 0xEE);
+    set_buffer(&p_rx2_pattern[0], sizeof(T), 0x11);
+    set_buffer(&p_rx2_pattern[1], sizeof(T), 0x22);
+    set_buffer(&p_rx2_pattern[2], sizeof(T), 0x33);
+    set_buffer(&p_rx2_pattern[3], sizeof(T), 0x44);
+    set_buffer(&p_rx2_pattern[4], sizeof(T), 0x55);
 
     set_buffer(p_fill_symbol, sizeof(T), 0xFF);
 
     /* Exception: master TX > master RX . */
     if (config->master_tx_cnt > config->master_rx_cnt) {
-        set_buffer(&p_rx1_pattern[3], sizeof(T), 0x00);
-        set_buffer(&p_rx1_pattern[4], sizeof(T), 0x00);
         set_buffer(&p_rx2_pattern[3], sizeof(T), 0x00);
         set_buffer(&p_rx2_pattern[4], sizeof(T), 0x00);
+
+
     }
     /* Exception: master TX < master RX . */
     if (config->master_tx_cnt < config->master_rx_cnt) {
-        set_buffer(&p_rx2_pattern[3], sizeof(T), 0xFF);
-        set_buffer(&p_rx2_pattern[4], sizeof(T), 0xFF);
-    }
-
-    /* Exception: slave TX > slave RX . */
-    if (config->slave_tx_cnt > config->slave_rx_cnt) {
-        set_buffer(&p_rx2_pattern[3], sizeof(T), 0x00);
-        set_buffer(&p_rx2_pattern[4], sizeof(T), 0x00);
-    }
-    /* Exception: slave TX < slave RX . */
-    if (config->slave_tx_cnt < config->slave_rx_cnt) {
         set_buffer(&p_rx1_pattern[3], sizeof(T), 0xFF);
         set_buffer(&p_rx1_pattern[4], sizeof(T), 0xFF);
         set_buffer(&p_rx2_pattern[3], sizeof(T), 0xFF);
         set_buffer(&p_rx2_pattern[4], sizeof(T), 0xFF);
     }
 
-    /* Exception: master TX buffer undefined . */
-    if (!config->master_tx_defined) {
-        set_buffer(&p_rx2_pattern[0], sizeof(T), 0xFF);
-        set_buffer(&p_rx2_pattern[1], sizeof(T), 0xFF);
-        set_buffer(&p_rx2_pattern[2], sizeof(T), 0xFF);
+    /* Exception: slave TX > slave RX . */
+    if (config->slave_tx_cnt > config->slave_rx_cnt) {
+        set_buffer(&p_rx1_pattern[3], sizeof(T), 0x00);
+        set_buffer(&p_rx1_pattern[4], sizeof(T), 0x00);
+        set_buffer(&p_rx2_pattern[3], sizeof(T), 0x00);
+        set_buffer(&p_rx2_pattern[4], sizeof(T), 0x00);
+    }
+    /* Exception: slave TX < slave RX . */
+    if (config->slave_tx_cnt < config->slave_rx_cnt) {
         set_buffer(&p_rx2_pattern[3], sizeof(T), 0xFF);
         set_buffer(&p_rx2_pattern[4], sizeof(T), 0xFF);
     }
 
-    /* Exception: master RX buffer undefined . */
-    if (!config->master_rx_defined) {
-        set_buffer(&p_rx1_pattern[0], sizeof(T), 0xAA);
-        set_buffer(&p_rx1_pattern[1], sizeof(T), 0xBB);
-        set_buffer(&p_rx1_pattern[2], sizeof(T), 0xCC);
-        set_buffer(&p_rx1_pattern[3], sizeof(T), 0xDD);
-        set_buffer(&p_rx1_pattern[4], sizeof(T), 0xEE);
-    }
-
-    /* Exception: slave TX buffer undefined . */
-    if (!config->slave_tx_defined) {
+    /* Exception: master TX buffer undefined . */
+    if (!config->master_tx_defined) {
         set_buffer(&p_rx1_pattern[0], sizeof(T), 0xFF);
         set_buffer(&p_rx1_pattern[1], sizeof(T), 0xFF);
         set_buffer(&p_rx1_pattern[2], sizeof(T), 0xFF);
@@ -281,13 +267,31 @@ static void init_transmission_buffers(config_test_case_t *config, T *p_tx_patter
         set_buffer(&p_rx2_pattern[4], sizeof(T), 0xFF);
     }
 
-    /* Exception: slave RX buffer undefined . */
-    if (!config->slave_rx_defined) {
+    /* Exception: master RX buffer undefined . */
+    if (!config->master_rx_defined) {
         set_buffer(&p_rx2_pattern[0], sizeof(T), 0x11);
         set_buffer(&p_rx2_pattern[1], sizeof(T), 0x22);
         set_buffer(&p_rx2_pattern[2], sizeof(T), 0x33);
         set_buffer(&p_rx2_pattern[3], sizeof(T), 0x44);
         set_buffer(&p_rx2_pattern[4], sizeof(T), 0x55);
+    }
+
+    /* Exception: slave TX buffer undefined . */
+    if (!config->slave_tx_defined) {
+        set_buffer(&p_rx2_pattern[0], sizeof(T), 0xFF);
+        set_buffer(&p_rx2_pattern[1], sizeof(T), 0xFF);
+        set_buffer(&p_rx2_pattern[2], sizeof(T), 0xFF);
+        set_buffer(&p_rx2_pattern[3], sizeof(T), 0xFF);
+        set_buffer(&p_rx2_pattern[4], sizeof(T), 0xFF);
+    }
+
+    /* Exception: slave RX buffer undefined . */
+    if (!config->slave_rx_defined) {
+        set_buffer(&p_rx1_pattern[0], sizeof(T), 0xAA);
+        set_buffer(&p_rx1_pattern[1], sizeof(T), 0xBB);
+        set_buffer(&p_rx1_pattern[2], sizeof(T), 0xCC);
+        set_buffer(&p_rx1_pattern[3], sizeof(T), 0xDD);
+        set_buffer(&p_rx1_pattern[4], sizeof(T), 0xEE);
     }
 
     /* Handle symbol size. */
@@ -303,32 +307,19 @@ static void init_transmission_buffers(config_test_case_t *config, T *p_tx_patter
     set_buffer(p_rx_buff, sizeof(T) * TEST_SYM_CNT, 0x00);
 }
 
-/* Function handles <ss> line if <ss> is specified.
- * When manual <ss> handling is selected <ss> is defined.
- */
-static void handle_ss(DigitalOut * ss, bool select)
-{
-    if (ss) {
-        if (select) {
-            *ss = 0;
-        } else {
-            *ss = 1;
-        }
-    }
-}
 
-/* Function which perform transfer using specified config on the master side. */
 template<typename T>
-int transfer_master(spi_t *obj, config_test_case_t *config, DigitalOut *ss)
+int slave_transfer(spi_t *obj, config_test_case_t *config)
 {
-    uint32_t count;
-    bool test_passed;
     int status = CMDLINE_RETCODE_SUCCESS;
+    bool test_passed;
+    uint32_t count;
+
     uint32_t clocked_symbols_1 = TEST_SYM_CNT;
     uint32_t clocked_symbols_2 = TEST_SYM_CNT;
 
     if (config->duplex != FULL_DUPLEX) {
-        clocked_symbols_1 = (config->master_tx_cnt + config->master_rx_cnt);
+        clocked_symbols_1 = (config->slave_tx_cnt + config->slave_rx_cnt);
         clocked_symbols_2 = (TEST_SYM_CNT + TEST_SYM_CNT);
     }
 
@@ -342,11 +333,11 @@ int transfer_master(spi_t *obj, config_test_case_t *config, DigitalOut *ss)
     void *p_tx_buff = tx_buff;
     void *p_rx_buff = rx_buff;
 
-    if (!config->master_tx_defined) {
+    if (!config->slave_tx_defined) {
         p_tx_buff = NULL;
     }
 
-    if (!config->master_rx_defined) {
+    if (!config->slave_rx_defined) {
         p_rx_buff = NULL;
     }
 
@@ -356,22 +347,20 @@ int transfer_master(spi_t *obj, config_test_case_t *config, DigitalOut *ss)
     wait_before_transmission();
     led = 1;
 
-    handle_ss(ss, true);
-    count = sync_async_transfer(obj, p_tx_buff, config->master_tx_cnt, p_rx_buff, config->master_rx_cnt, (void*) &fill_symbol, config->sync);
-    handle_ss(ss, false);
+    count = sync_async_transfer(obj, p_tx_buff, config->slave_tx_cnt, p_rx_buff, config->slave_rx_cnt, &fill_symbol, config->sync);
 
     if (!check_buffers(rx1_pattern, p_rx_buff, sizeof(T) * TEST_SYM_CNT)) {
-        printf("ERROR (T1): Master RX buffer invalid. \r\n ");
+        printf("ERROR (T1): Slave RX buffer invalid. \r\n ");
         test_passed = false;
     }
 
     if (!check_buffers(tx_pattern, p_tx_buff, sizeof(T) * TEST_SYM_CNT)) {
-        printf("ERROR (T1): Master TX buffer invalid. \r\n ");
+        printf("ERROR (T1): Slave TX buffer invalid. \r\n ");
         test_passed = false;
     }
 
     if (clocked_symbols_1 != count) {
-        printf("ERROR (T1): Master Clocked symbol count invalid. \r\n ");
+        printf("ERROR (T1): Slave Clocked symbol count invalid. \r\n ");
         test_passed = false;
     }
 
@@ -379,33 +368,30 @@ int transfer_master(spi_t *obj, config_test_case_t *config, DigitalOut *ss)
         dump_buffers<T>(tx_pattern, rx1_pattern, rx2_pattern, tx_buff, rx_buff);
     }
 
-    /* Init TX buffer with data received from slave if possible. */
-
+    /* Send data received from master in the previous transmission if possible. */
     if (p_tx_buff && p_rx_buff) {
         memcpy(p_tx_buff, p_rx_buff, sizeof(tx_buff));
-        memcpy(tx_pattern, p_rx_buff, sizeof(tx_buff));
     }
 
     set_buffer(rx_buff, sizeof(rx_buff), 0x00);
 
     test_passed = true;
     wait_before_transmission();
-    handle_ss(ss, true);
-    count = sync_async_transfer(obj, tx_buff, TEST_SYM_CNT, rx_buff, TEST_SYM_CNT, (void*) &fill_symbol, config->sync);
-    handle_ss(ss, false);
 
-    if (!check_buffers(rx2_pattern, p_rx_buff, sizeof(T) * TEST_SYM_CNT)) {
-        printf("ERROR (T2): Master RX buffer invalid. \r\n ");
+    count = sync_async_transfer(obj, p_tx_buff, TEST_SYM_CNT, p_rx_buff, TEST_SYM_CNT, &fill_symbol, config->sync);
+
+    if (!check_buffers(rx1_pattern, p_rx_buff, sizeof(T) * TEST_SYM_CNT)) {
+        printf("ERROR (T1): Slave RX buffer invalid. \r\n ");
         test_passed = false;
     }
 
     if (!check_buffers(tx_pattern, p_tx_buff, sizeof(T) * TEST_SYM_CNT)) {
-        printf("ERROR (T2): Master TX buffer invalid. \r\n ");
+        printf("ERROR (T1): Slave TX buffer invalid. \r\n ");
         test_passed = false;
     }
 
     if (clocked_symbols_2 != count) {
-        printf("ERROR (T2): Master Clocked symbol count invalid. \r\n ");
+        printf("ERROR (T2): Slave Clocked symbol count invalid. \r\n ");
         test_passed = false;
     }
 
@@ -417,16 +403,22 @@ int transfer_master(spi_t *obj, config_test_case_t *config, DigitalOut *ss)
 }
 
 /* test_init command. */
-int test_init_master(spi_t * obj, config_test_case_t *config, DigitalOut ** ss)
+int test_init_slave(spi_t * obj, config_test_case_t *config)
 {
     spi_capabilities_t capabilities = { 0 };
-    PinName ss_pin = MBED_CONF_APP_SPI_MASTER_CS;
-    PinName miso = MBED_CONF_APP_SPI_MASTER_MISO;
-    PinName mosi = MBED_CONF_APP_SPI_MASTER_MOSI;
 
-    spi_get_capabilities(spi_get_module(MBED_CONF_APP_SPI_MASTER_MOSI, MBED_CONF_APP_SPI_MASTER_MISO, MBED_CONF_APP_SPI_MASTER_CLK), NC, &capabilities);
+    led = 0;
 
-    /* Adapt Full Duplex/Half Duplex settings. */
+    spi_get_capabilities(spi_get_module(MBED_CONF_APP_SPI_SLAVE_MOSI,
+                                        MBED_CONF_APP_SPI_SLAVE_MISO,
+                                        MBED_CONF_APP_SPI_SLAVE_CLK),
+                         MBED_CONF_APP_SPI_SLAVE_CS,
+                         &capabilities);
+
+    PinName miso = MBED_CONF_APP_SPI_SLAVE_MISO;
+    PinName mosi = MBED_CONF_APP_SPI_SLAVE_MOSI;
+
+    /* Adapt Full duplex/Half duplex settings. */
     switch (config->duplex)
     {
         case HALF_DUPLEX_MOSI:
@@ -440,58 +432,31 @@ int test_init_master(spi_t * obj, config_test_case_t *config, DigitalOut ** ss)
         default:
             break;
     }
-
-    /* Adapt min/max frequency for testing based of capabilities. */
-    switch (config->freq_hz)
-    {
-        case FREQ_MIN:
-            config->freq_hz = capabilities.minimum_frequency;
-            break;
-
-        case FREQ_MAX:
-            config->freq_hz = capabilities.maximum_frequency;
-            break;
-
-        default:
-            break;
-    }
-
-    /* Adapt manual/auto SS handling by master. */
-    if (!config->auto_ss) {
-        ss_pin = NC;
-        *ss = new DigitalOut(MBED_CONF_APP_SPI_MASTER_CS);
-        **ss = 1;
-    }
-
-    led = 0;
-
-    spi_init(obj, false, mosi, miso, MBED_CONF_APP_SPI_MASTER_CLK, ss_pin);
+    spi_init(obj, true, mosi, miso, MBED_CONF_APP_SPI_SLAVE_CLK, MBED_CONF_APP_SPI_SLAVE_CS);
 
     spi_format(obj, config->symbol_size, config->mode, config->bit_ordering);
-
-    spi_frequency(obj, config->freq_hz);
 
     return CMDLINE_RETCODE_SUCCESS;
 }
 
 /* test_transfer command. */
-int test_transfer_master(spi_t * obj, config_test_case_t *config, DigitalOut * ss)
+int test_transfer_slave(spi_t * obj,config_test_case_t *config)
 {
     int status = CMDLINE_RETCODE_SUCCESS;
 
     if (config->symbol_size <= 8) {
-        status = transfer_master<uint8_t>(obj, config, ss);
+        status = slave_transfer<uint8_t>(obj, config);
     } else if (config->symbol_size <= 16) {
-        status = transfer_master<uint16_t>(obj,config, ss);
+        status = slave_transfer<uint16_t>(obj, config);
     } else {
-        status = transfer_master<uint32_t>(obj,config, ss);
+        status = slave_transfer<uint16_t>(obj, config);
     }
 
     return status;
 }
 
 /* test_finish command. */
-int test_finish_master(spi_t * obj, config_test_case_t *config)
+int test_finish_slave(spi_t * obj, config_test_case_t *config)
 {
     spi_free(obj);
 

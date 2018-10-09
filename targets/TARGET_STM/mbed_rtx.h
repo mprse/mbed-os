@@ -21,6 +21,8 @@
 
 #ifndef INITIAL_SP
 
+#define MBED_CONF_RTOS_MAIN_THREAD_STACK_SIZE 1024
+
 #if (defined(TARGET_STM32L475VG) ||\
      defined(TARGET_STM32L476RG) ||\
      defined(TARGET_STM32L476JG) ||\
