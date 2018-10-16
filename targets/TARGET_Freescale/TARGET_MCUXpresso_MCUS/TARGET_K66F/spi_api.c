@@ -109,7 +109,7 @@ void spi_format(spi_t *obj, uint8_t bits, spi_mode_t mode, spi_bit_ordering_t bi
         /* Slave config */
         DSPI_SlaveGetDefaultConfig(&slave_config);
         slave_config.whichCtar = kDSPI_Ctar0;
-        slave_config.ctarConfig.bitsPerFrame = (uint32_t)bits;;
+        slave_config.ctarConfig.bitsPerFrame = (uint32_t)bits;
         slave_config.ctarConfig.cpol = cpol;
         slave_config.ctarConfig.cpha = cpha;
 
@@ -117,7 +117,7 @@ void spi_format(spi_t *obj, uint8_t bits, spi_mode_t mode, spi_bit_ordering_t bi
     } else {
         /* Master config */
         DSPI_MasterGetDefaultConfig(&master_config);
-        master_config.ctarConfig.bitsPerFrame = (uint32_t)bits;;
+        master_config.ctarConfig.bitsPerFrame = (uint32_t)bits;
         master_config.ctarConfig.cpol = cpol;
         master_config.ctarConfig.cpha = cpha;
         master_config.ctarConfig.direction = (bit_ordering == SPI_BIT_ORDERING_MSB_FIRST)? kDSPI_MsbFirst : kDSPI_LsbFirst;
@@ -136,7 +136,7 @@ uint32_t spi_frequency(spi_t *obj, uint32_t hz)
     return actual_br;
 }
 
-static int spi_master_write(spi_t *obj, int value)
+static int spi_write(spi_t *obj, uint32_t value)
 {
     uint32_t rx_data;
     if (obj->is_slave) {
@@ -158,23 +158,95 @@ static int spi_master_write(spi_t *obj, int value)
     return rx_data & 0xffff;
 }
 
+static void spi_irq_handler(spi_t *obj, status_t status) {
+    if (obj->handler != NULL) {
+        spi_async_handler_f handler = obj->handler;
+        void *ctx = obj->ctx;
+        obj->handler = NULL;
+        obj->ctx = NULL;
+
+        spi_async_event_t event = {
+            .transfered = obj->transfer_len,
+            .error = false
+        };
+
+        handler(obj, ctx, &event);
+    }
+}
+static void spi_master_irq_handler(SPI_Type *base, dspi_master_handle_t *handle, status_t status, void *userData) {
+    spi_irq_handler(userData, status);
+}
+static void spi_slave_irq_callback(SPI_Type *base, dspi_slave_handle_t *handle, status_t status, void *userData) {
+    spi_irq_handler(userData, status);
+}
+
+static void spi_sync_transfer_handler(spi_t *obj, void *ctx, spi_async_event_t *event) {
+    obj->transfered = event->transfered;
+}
+
+static uint32_t spi_symbol_size(spi_t *obj) {
+    if (obj->bits > 16) { return 4; }
+    else if (obj->bits > 8) { return 2; }
+    return 1;
+}
+
+static uint32_t spi_get_symbol(spi_t *obj, const void *from, uint32_t i) {
+    uint32_t val = 0;
+    switch (spi_symbol_size(obj)) {
+        case 1:
+            val = ((uint8_t *)from)[i];
+        break;
+        case 2:
+            val = ((uint16_t *)from)[i];
+        break;
+        case 4:
+            val = ((uint32_t *)from)[i];
+        break;
+        default:
+            // TODO: TRAP ?
+            break;
+    }
+    return val;
+}
+
+static void spi_set_symbol(spi_t *obj, void *to, uint32_t i, uint32_t val) {
+    switch (spi_symbol_size(obj)) {
+        case 1:
+            ((uint8_t *)to)[i] = val;
+            break;
+        case 2:
+            ((uint16_t *)to)[i] = val;
+            break;
+        case 4:
+            ((uint32_t *)to)[i] = val;
+            break;
+        default:
+            // TODO: TRAP ?
+            break;
+    }
+}
+
 uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
-                      void *rx_buffer, uint32_t rx_length, const void *write_fill) {
-    int total;
-    if (tx_length == 1 && rx_length == 1) {
-        if (obj->bits <= 8) {
-            ((uint8_t *)rx_buffer)[0] = spi_master_write(obj, (tx_length == 1)?(((uint8_t*)tx_buffer)[0]):*(uint8_t *)write_fill);
-        } else if (obj->bits <= 16) {
-            ((uint16_t *)rx_buffer)[0] = spi_master_write(obj, (tx_length == 1)?(((uint16_t*)tx_buffer)[0]):*(uint16_t *)write_fill);
-        } else if (obj->bits <= 32) {
-            ((uint32_t *)rx_buffer)[0] = spi_master_write(obj, (tx_length == 1)?(((uint32_t*)tx_buffer)[0]):*(uint32_t *)write_fill);
-        } // else trap !
+                      void *rx_buffer, uint32_t rx_length, const void *fill) {
+    int total = 0;
+    if (tx_length == 1 || rx_length == 1) {
+        uint32_t val_o = 0;
+        if (tx_length != 0) {
+            val_o = spi_get_symbol(obj, tx_buffer, 0);
+        } else {
+            val_o = spi_get_symbol(obj, fill, 0);
+        }
+        uint32_t val_i = spi_write(obj, val_o);
+
+        if (rx_length != 0) {
+            spi_set_symbol(obj, rx_buffer, 0, val_i);
+        }
         total = 1;
     } else {
         total = (tx_length > rx_length) ? tx_length : rx_length;
 
         // Default write is done in each and every call, in future can create HAL API instead
-        DSPI_SetDummyData(spi_address[obj->instance], *(uint32_t *)write_fill);
+        DSPI_SetDummyData(spi_address[obj->instance], *(uint32_t *)fill);
 
         DSPI_MasterTransferBlocking(spi_address[obj->instance], &(dspi_transfer_t){
               .txData = (uint8_t *)tx_buffer,
@@ -187,6 +259,55 @@ uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
     }
 
     return total;
+}
+
+bool spi_transfer_async(spi_t *obj, const void *tx, uint32_t tx_len, void *rx, uint32_t rx_len,
+        const void *fill, spi_async_handler_f handler, void *ctx, DMAUsage hint)
+{
+    SPI_Type *spi = spi_address[obj->instance];
+
+    obj->handler = handler;
+    obj->ctx = ctx;
+
+    DSPI_SetDummyData(spi, *(uint32_t *)fill);
+    uint32_t len = (rx_len>tx_len)?rx_len:tx_len;
+    obj->transfer_len = len;
+
+    if (!obj->is_slave) {
+        dspi_master_handle_t *handle = &obj->u.master.handle;
+        DSPI_MasterTransferCreateHandle(spi, handle, spi_master_irq_handler, obj);
+        if (DSPI_MasterTransferNonBlocking(spi, handle, &(dspi_transfer_t){
+            .txData = (uint8_t *)tx,
+            .rxData = (uint8_t *)rx,
+            .dataSize = len,
+            .configFlags = kDSPI_MasterCtar0 | kDSPI_MasterPcs0 | kDSPI_MasterPcsContinuous,
+        }) != kStatus_Success) {
+            return false;
+        }
+        DSPI_ClearStatusFlags(spi, kDSPI_RxFifoDrainRequestFlag | kDSPI_EndOfQueueFlag);
+    } else {
+        dspi_slave_handle_t *handle = &obj->u.slave.handle;
+        DSPI_SlaveTransferCreateHandle(spi, handle, spi_slave_irq_callback, obj);
+        if (DSPI_SlaveTransferNonBlocking(spi, handle, &(dspi_transfer_t){
+            .txData = (uint8_t *)tx,
+            .rxData = (uint8_t *)rx,
+            .dataSize = len,
+            .configFlags = kDSPI_SlaveCtar0,
+        }) != kStatus_Success) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void spi_transfer_async_abort(spi_t *obj) {
+    SPI_Type *spi = spi_address[obj->instance];
+
+    if (obj->is_slave) {
+        DSPI_SlaveTransferAbort(spi, &obj->u.slave.handle);
+    } else {
+        DSPI_MasterTransferAbort(spi, &obj->u.master.handle);
+    }
 }
 
 #endif

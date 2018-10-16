@@ -77,12 +77,22 @@ struct spi_s {
     bool is_slave;
     spi_bit_ordering_t order;
 #if DEVICE_SPI_ASYNCH
+    spi_async_handler_f handler;
+    void *ctx;
+    uint32_t transfer_len;
+    volatile uint32_t transfered;
+
     status_t status;
+
     dspi_master_handle_t spi_master_handle;
-    dspi_master_edma_handle_t spi_dma_master_handle;
-    dma_options_t spiDmaMasterRx;
-    dma_options_t spiDmaMasterTx;
-    dma_options_t spiDmaMasterIntermediary;
+    union mode_u {
+        struct master_s {
+            dspi_master_handle_t handle;
+        } master;
+        struct slave_s {
+            dspi_slave_handle_t handle;
+        } slave;
+    } u;
 #endif
 };
 
