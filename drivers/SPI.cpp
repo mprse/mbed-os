@@ -113,9 +113,6 @@ void SPI::format(uint8_t bits, spi_mode_t mode, bool msb_first)
     unlock();
 }
 
-void SPI::frequency(int hz) {
-    frequency((uint32_t)hz);
-}
 uint32_t SPI::frequency(uint32_t hz)
 {
     uint32_t actual_hz;

@@ -117,7 +117,6 @@ public:
      *
      *  @param hz SCLK frequency in hz (default = 1MHz)
      */
-    void frequency(int hz = 1000000);
     uint32_t frequency(uint32_t hz = 1000000);
 
     /** Write to the SPI Slave and return the response
