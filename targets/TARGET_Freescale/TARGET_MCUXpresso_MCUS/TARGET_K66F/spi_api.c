@@ -33,6 +33,16 @@ static SPI_Type *const spi_address[] = SPI_BASE_PTRS;
 /* Array of SPI bus clock frequencies */
 static clock_name_t const spi_clocks[] = SPI_CLOCK_FREQS;
 
+void spi_get_capabilities(SPIName name, PinName ssel, spi_capabilities_t *cap)
+{
+    cap->word_length = (1<<7 | 1<<15);
+    cap->support_slave_mode = true;
+    cap->half_duplex = true;
+
+    cap->minimum_frequency = 200000;
+    cap->maximum_frequency = 2000000;
+}
+
 SPIName spi_get_module(PinName mosi, PinName miso, PinName sclk) {
     int32_t spi_mosi = pinmap_find_peripheral(mosi, PinMap_SPI_SOUT);
     int32_t spi_miso = pinmap_find_peripheral(miso, PinMap_SPI_SIN);

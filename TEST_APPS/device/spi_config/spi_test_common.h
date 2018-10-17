@@ -20,6 +20,8 @@
 #define FREQ_2MHZ   (2000000)
 #define FREQ_MIN    (0)
 #define FREQ_MAX    (0xFFFFFFFF)
+#define US_PER_MS   (1000)
+#define US_PER_S    (1000000)
 
 #if IS_MASTER
 #define SPI_MISO MBED_CONF_APP_SPI_MASTER_MISO
@@ -36,6 +38,7 @@
 #define SPI_CLK MBED_CONF_APP_SPI_SLAVE_CLK
 #define SPI_SS MBED_CONF_APP_SPI_SLAVE_CS
 #define TRANSMISSION_DELAY_MS MBED_CONF_APP_SPI_SLAVE_DELAY
+#define TRANSMISSION_DELAY_MASTER_MS MBED_CONF_APP_SPI_MASTER_DELAY
 #define TRANSMISSION_BUTTON MBED_CONF_APP_SPI_SLAVE_TRANSMISSION_START_BTN
 #define TRANSMISSION_LED MBED_CONF_APP_SPI_SLAVE_TRANSMISSION_START_LED
 #define DEBUG MBED_CONF_APP_SPI_SLAVE_DEBUG
@@ -65,6 +68,24 @@ typedef struct
     duplex_t duplex;
     bool sync;
 } config_test_case_t;
+
+typedef struct {
+    spi_t * obj;
+    config_test_case_t *config;
+    DigitalOut *ss;
+    int status;
+} trans_thread_params_t;
+
+static Timeout transm_thread_timeout;
+static Thread transm_thread(osPriorityNormal);
+static volatile bool transfer_finished;
+static Semaphore sem(0, 1);
+
+/* Timeout handler for slave transmission. */
+static void transm_timeout_handler()
+{
+    sem.release();
+}
 
 template<typename T>
 void init_transmission_buffers(config_test_case_t *config, T *p_tx_pattern, T *p_rx1_pattern, T *p_rx2_pattern, T *p_tx_buff, T *p_rx_buff, T *p_fill_symbol);

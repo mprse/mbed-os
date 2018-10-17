@@ -160,17 +160,48 @@ int test_init_slave(spi_t * obj, config_test_case_t *config)
     return CMDLINE_RETCODE_SUCCESS;
 }
 
-/* Function handles test_transfer command. */
-int test_transfer_slave(spi_t * obj,config_test_case_t *config)
+/* Auxiliary thread which is used to handle transmission on the slave side.
+ * In case when transmission is not finished after specified timeout, then
+ * this thread is terminated and test failure is indicated. */
+void transfer_thread(void * thread_params)
 {
     int status = CMDLINE_RETCODE_SUCCESS;
+    trans_thread_params_t *params = (trans_thread_params_t*)thread_params;
 
-    if (config->symbol_size <= 8) {
-        status = perform_transfer<uint8_t>(obj, config, NULL);
-    } else if (config->symbol_size <= 16) {
-        status = perform_transfer<uint16_t>(obj, config, NULL);
+    if (params->config->symbol_size <= 8) {
+        status = perform_transfer<uint8_t>(params->obj, params->config, NULL);
+    } else if (params->config->symbol_size <= 16) {
+        status = perform_transfer<uint16_t>(params->obj, params->config, NULL);
     } else {
-        status = perform_transfer<uint32_t>(obj, config, NULL);
+        status = perform_transfer<uint32_t>(params->obj, params->config, NULL);
+    }
+
+    transfer_finished = true;
+
+    params->status = status;
+
+    sem.release();
+}
+
+/* Function handles test_transfer command. */
+int test_transfer_slave(spi_t * obj, config_test_case_t *config)
+{
+    int status = CMDLINE_RETCODE_SUCCESS;
+    trans_thread_params_t trans_thread_params = {obj, config, CMDLINE_RETCODE_SUCCESS};
+
+    /* Set slave transmission test timeout to 1 sec + master delays */
+    transm_thread_timeout.attach_us(transm_timeout_handler, US_PER_S + 2 * TRANSMISSION_DELAY_MASTER_MS * US_PER_MS);
+
+    transfer_finished = false;
+    transm_thread.set_priority(osPriorityNormal);
+
+    transm_thread.start(callback(transfer_thread, (void*)&trans_thread_params));
+
+    sem.wait();
+
+    if (!transfer_finished) {
+        transm_thread.terminate();
+        printf("ERROR: Slave transmission timeout. \r\n ");
     }
 
     return status;

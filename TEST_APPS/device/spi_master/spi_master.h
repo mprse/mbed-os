@@ -179,17 +179,48 @@ int test_init_master(spi_t * obj, config_test_case_t *config, DigitalOut ** ss)
     return CMDLINE_RETCODE_SUCCESS;
 }
 
+/* Auxiliary thread which is used to handle transmission on the slave side.
+ * In case when transmission is not finished after specified timeout, then
+ * this thread is terminated and test failure is indicated. */
+void transfer_thread(void * thread_params)
+{
+    int status = CMDLINE_RETCODE_SUCCESS;
+    trans_thread_params_t *params = (trans_thread_params_t*)thread_params;
+
+    if (params->config->symbol_size <= 8) {
+        status = perform_transfer<uint8_t>(params->obj, params->config, params->ss);
+    } else if (params->config->symbol_size <= 16) {
+        status = perform_transfer<uint16_t>(params->obj, params->config, params->ss);
+    } else {
+        status = perform_transfer<uint32_t>(params->obj, params->config, params->ss);
+    }
+
+    transfer_finished = true;
+
+    params->status = status;
+
+    sem.release();
+}
+
 /* Function handles test_transfer command. */
 int test_transfer_master(spi_t * obj, config_test_case_t *config, DigitalOut * ss)
 {
     int status = CMDLINE_RETCODE_SUCCESS;
+    trans_thread_params_t trans_thread_params = {obj, config, ss, CMDLINE_RETCODE_SUCCESS};
 
-    if (config->symbol_size <= 8) {
-        status = perform_transfer<uint8_t>(obj, config, ss);
-    } else if (config->symbol_size <= 16) {
-        status = perform_transfer<uint16_t>(obj,config, ss);
-    } else {
-        status = perform_transfer<uint32_t>(obj,config, ss);
+    /* Set slave transmission test timeout to 1 sec + master delays */
+    transm_thread_timeout.attach_us(transm_timeout_handler, US_PER_S + 2 * TRANSMISSION_DELAY_MS * US_PER_MS);
+
+    transfer_finished = false;
+    transm_thread.set_priority(osPriorityNormal);
+
+    transm_thread.start(callback(transfer_thread, (void*)&trans_thread_params));
+
+    sem.wait();
+
+    if (!transfer_finished) {
+        transm_thread.terminate();
+        printf("ERROR: Master transmission timeout. \r\n ");
     }
 
     return status;

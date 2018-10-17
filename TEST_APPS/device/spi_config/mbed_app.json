@@ -20,11 +20,11 @@
     },
     "target_overrides": {
         "K66F": {
-            "SPI_MASTER_CS": "PTE25",
-            "SPI_MASTER_MOSI": "PTD13",
-            "SPI_MASTER_MISO": "PTB23",
-            "SPI_MASTER_CLK": "PTD12",
-            "SPI_MASTER_DEBUG": "1",
+            "SPI_MASTER_CS": "PTD0",
+            "SPI_MASTER_MOSI": "PTD2",
+            "SPI_MASTER_MISO": "PTD3",
+            "SPI_MASTER_CLK": "PTD1",
+            "SPI_MASTER_DEBUG": "0",
             "SPI_MASTER_DELAY": "1000",
             "SPI_MASTER_TRANSMISSION_START_BTN": "NC",
             "SPI_MASTER_TRANSMISSION_START_LED": "LED1",
