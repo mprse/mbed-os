@@ -74,10 +74,8 @@ struct SPI::spi_peripheral_s *SPI::lookup(SPIName name, bool or_last) {
     struct SPI::spi_peripheral_s *result = NULL;
     core_util_critical_section_enter();
     for (uint32_t idx = 0; idx < SPI_COUNT; idx++) {
-        printf("SPI::lookup(%08x) found at %lu", name, idx);
         if ((_peripherals[idx].name == name) ||
             (_peripherals[idx].name == 0)) {
-            printf("SPI::lookup(%08x) found at %lu", name, idx);
             result = &_peripherals[idx];
             break;
         }
@@ -155,7 +153,7 @@ int SPI::write(int value)
     lock();
     _acquire();
     uint32_t ret = 0;
-    spi_transfer(&_self->spi, &value, _bits/8, &ret, _bits/8, NULL);
+    spi_transfer(&_self->spi, &value, (_bits+7)/8, &ret, (_bits+7)/8, NULL);
     unlock();
     return ret;
 }

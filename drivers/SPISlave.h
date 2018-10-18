@@ -118,6 +118,12 @@ protected:
     uint8_t _bits;
     spi_mode_t _mode;
     uint32_t _hz;
+    volatile uint32_t _buffer;
+    uint32_t _dummy;
+    volatile bool _is_pending;
+    volatile bool _has_received;
+
+    static void irq_handler(spi_t *obj, void *ctx, spi_async_event_t *event);
 };
 
 } // namespace mbed
