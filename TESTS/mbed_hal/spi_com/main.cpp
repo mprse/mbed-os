@@ -31,7 +31,7 @@ using namespace utest::v1;
 /* Array witch test cases which represents different SPI configurations for testing. */
 static config_test_case_t test_cases[] = {
         /* default config: 8 bit symbol\sync mode\full duplex\clock idle low\sample on the first clock edge\MSB first\100 KHz clock\manual SS handling */
-/* 00 */{8, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE    , SPI_BIT_ORDERING_MSB_FIRST, 10000        , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , false , FULL_DUPLEX     , true },
+/* 00 */{8, SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE    , SPI_BIT_ORDERING_MSB_FIRST, 1000000        , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , false , FULL_DUPLEX     , true },
         /* symbol size testing */
 /* 01 */{1  , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_200KHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , false , FULL_DUPLEX     , true },
 /* 02 */{7  , SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE  , SPI_BIT_ORDERING_MSB_FIRST, FREQ_200KHZ  , TEST_SYM_CNT   , TEST_SYM_CNT  , TEST_SYM_CNT  , TEST_SYM_CNT  , true , true , true , true , false , FULL_DUPLEX     , true },
@@ -390,7 +390,7 @@ utest::v1::status_t test_setup(const size_t number_of_cases)
 
 Case cases[] = {
     Case("SPI master-slave sync com - default config", test_transfer_master<uint8_t, 0>),
-#if 0
+#if 1
     Case("SPI master-slave sync com - symbol size: 1", test_transfer_master<uint8_t, 1>),
     Case("SPI master-slave sync com - symbol size: 7", test_transfer_master<uint8_t, 2>),
     Case("SPI master-slave sync com - symbol size: 9", test_transfer_master<uint16_t, 3>),
