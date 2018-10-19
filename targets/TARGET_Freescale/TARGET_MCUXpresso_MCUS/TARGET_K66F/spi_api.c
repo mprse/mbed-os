@@ -238,7 +238,7 @@ static void spi_set_symbol(spi_t *obj, void *to, uint32_t i, uint32_t val) {
 
 uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
                       void *rx_buffer, uint32_t rx_length, const void *fill) {
-    int total = 0;
+    uint32_t total = 0;
     if (tx_length == 1 || rx_length == 1) {
         uint32_t val_o = 0;
         if (tx_length != 0) {
@@ -253,19 +253,40 @@ uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
         }
         total = 1;
     } else {
-        total = (tx_length > rx_length) ? tx_length : rx_length;
+        SPI_Type *spi = spi_address[obj->instance];
+        total = (tx_length < rx_length) ? tx_length : rx_length;
 
-        // Default write is done in each and every call, in future can create HAL API instead
-        DSPI_SetDummyData(spi_address[obj->instance], *(uint32_t *)fill);
+        if (total != 0) {
+            DSPI_MasterTransferBlocking(spi, &(dspi_transfer_t){
+                  .txData = (uint8_t *)tx_buffer,
+                  .rxData = (uint8_t *)rx_buffer,
+                  .dataSize = total,
+                  .configFlags = kDSPI_MasterCtar0 | kDSPI_MasterPcs0 | kDSPI_MasterPcsContinuous,
+            });
+        }
 
-        DSPI_MasterTransferBlocking(spi_address[obj->instance], &(dspi_transfer_t){
+        uint32_t transfer_size = 0;
+        if (tx_length > total) {
+            tx_buffer = ((uint8_t *)tx_buffer) + spi_symbol_size(obj)*total;
+            rx_buffer = NULL;
+            transfer_size = tx_length - total;
+            total = tx_length;
+        } else if (rx_length > total) {
+            // Default write is done in each and every call, in future can create HAL API instead
+            DSPI_SetDummyData(spi, *(uint32_t *)fill);
+
+            rx_buffer = ((uint8_t *)rx_buffer) + spi_symbol_size(obj)*total;
+            tx_buffer = NULL;
+            transfer_size = rx_length - total;
+            total = rx_length;
+        }
+        DSPI_MasterTransferBlocking(spi, &(dspi_transfer_t){
               .txData = (uint8_t *)tx_buffer,
               .rxData = (uint8_t *)rx_buffer,
-              .dataSize = total,
+              .dataSize = transfer_size,
               .configFlags = kDSPI_MasterCtar0 | kDSPI_MasterPcs0 | kDSPI_MasterPcsContinuous,
         });
-
-        DSPI_ClearStatusFlags(spi_address[obj->instance], kDSPI_RxFifoDrainRequestFlag | kDSPI_EndOfQueueFlag);
+        DSPI_ClearStatusFlags(spi, kDSPI_RxFifoDrainRequestFlag | kDSPI_EndOfQueueFlag);
     }
 
     return total;
