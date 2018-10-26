@@ -241,7 +241,8 @@ static void spi_set_symbol(spi_t *obj, void *to, uint32_t i, uint32_t val) {
 uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
                       void *rx_buffer, uint32_t rx_length, const void *fill) {
     uint32_t total = 0;
-    if (tx_length == 1 || rx_length == 1) {
+    if ((tx_length == 0) && (rx_length == 0)) { return 0; }
+    else if ((tx_length <= 1) && (rx_length <= 1)) {
         uint32_t val_o = 0;
         if (tx_length != 0) {
             val_o = spi_get_symbol(obj, tx_buffer, 0);
@@ -286,12 +287,14 @@ uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
             transfer_size = rx_length - total;
             total = rx_length;
         }
-        DSPI_MasterTransferBlocking(spi, &(dspi_transfer_t){
-              .txData = (uint8_t *)tx_buffer,
-              .rxData = (uint8_t *)rx_buffer,
-              .dataSize = transfer_size * spi_symbol_size(obj),
-              .configFlags = kDSPI_MasterCtar0 | kDSPI_MasterPcs0 | kDSPI_MasterPcsContinuous,
-        });
+        if (transfer_size != 0) {
+            DSPI_MasterTransferBlocking(spi, &(dspi_transfer_t){
+                  .txData = (uint8_t *)tx_buffer,
+                  .rxData = (uint8_t *)rx_buffer,
+                  .dataSize = transfer_size * spi_symbol_size(obj),
+                  .configFlags = kDSPI_MasterCtar0 | kDSPI_MasterPcs0 | kDSPI_MasterPcsContinuous,
+            });
+        }
         DSPI_ClearStatusFlags(spi, kDSPI_RxFifoDrainRequestFlag | kDSPI_EndOfQueueFlag);
     }
 
