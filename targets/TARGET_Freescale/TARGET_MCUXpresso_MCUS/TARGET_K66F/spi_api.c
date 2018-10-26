@@ -258,6 +258,9 @@ uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
         SPI_Type *spi = spi_address[obj->instance];
         total = (tx_length < rx_length) ? tx_length : rx_length;
 
+        // Default write is done in each and every call, in future can create HAL API instead
+        DSPI_SetDummyData(spi, *(uint32_t *)fill);
+
         if (total != 0) {
             DSPI_MasterTransferBlocking(spi, &(dspi_transfer_t){
                   .txData = (uint8_t *)tx_buffer,
@@ -269,15 +272,16 @@ uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
 
         uint32_t transfer_size = 0;
         if (tx_length > total) {
-            tx_buffer = ((uint8_t *)tx_buffer) + spi_symbol_size(obj)*total;
+            if (tx_buffer != NULL) {
+                tx_buffer = ((uint8_t *)tx_buffer) + spi_symbol_size(obj)*total;
+            }
             rx_buffer = NULL;
             transfer_size = tx_length - total;
             total = tx_length;
         } else if (rx_length > total) {
-            // Default write is done in each and every call, in future can create HAL API instead
-            DSPI_SetDummyData(spi, *(uint32_t *)fill);
-
-            rx_buffer = ((uint8_t *)rx_buffer) + spi_symbol_size(obj)*total;
+            if (rx_buffer != NULL) {
+                rx_buffer = ((uint8_t *)rx_buffer) + spi_symbol_size(obj)*total;
+            }
             tx_buffer = NULL;
             transfer_size = rx_length - total;
             total = rx_length;
