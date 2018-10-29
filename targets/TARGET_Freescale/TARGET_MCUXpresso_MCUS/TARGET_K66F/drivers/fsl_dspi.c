@@ -847,6 +847,270 @@ status_t DSPI_MasterTransferBlocking(SPI_Type *base, dspi_transfer_t *transfer)
     return kStatus_Success;
 }
 
+status_t DSPI_TransferBlockingWithLimit(SPI_Type *base, dspi_transfer_t *transfer, uint32_t tx_limit, uint32_t rx_limit)
+{
+    assert(transfer);
+
+    uint16_t wordToSend = 0;
+    uint16_t wordReceived = 0;
+    uint8_t dummyData = s_dummyData[DSPI_GetInstance(base)];
+    uint8_t bitsPerFrame;
+
+    uint32_t command;
+    uint32_t lastCommand;
+
+    uint8_t *txData;
+    uint8_t *rxData;
+    uint32_t remainingSendByteCount;
+    uint32_t remainingReceiveByteCount;
+
+    uint32_t fifoSize;
+    dspi_command_data_config_t commandStruct;
+
+    /* If the transfer count is zero, then return immediately.*/
+    if (transfer->dataSize == 0)
+    {
+        return kStatus_InvalidArgument;
+    }
+
+    DSPI_StopTransfer(base);
+    DSPI_DisableInterrupts(base, kDSPI_AllInterruptEnable);
+    DSPI_FlushFifo(base, true, true);
+    DSPI_ClearStatusFlags(base, kDSPI_AllStatusFlag);
+
+    /*Calculate the command and lastCommand*/
+    commandStruct.whichPcs =
+        (dspi_which_pcs_t)(1U << ((transfer->configFlags & DSPI_MASTER_PCS_MASK) >> DSPI_MASTER_PCS_SHIFT));
+    commandStruct.isEndOfQueue = false;
+    commandStruct.clearTransferCount = false;
+    commandStruct.whichCtar =
+        (dspi_ctar_selection_t)((transfer->configFlags & DSPI_MASTER_CTAR_MASK) >> DSPI_MASTER_CTAR_SHIFT);
+    commandStruct.isPcsContinuous = (bool)(transfer->configFlags & kDSPI_MasterPcsContinuous);
+
+    command = DSPI_MasterGetFormattedCommand(&(commandStruct));
+
+    commandStruct.isEndOfQueue = true;
+    commandStruct.isPcsContinuous = (bool)(transfer->configFlags & kDSPI_MasterActiveAfterTransfer);
+    lastCommand = DSPI_MasterGetFormattedCommand(&(commandStruct));
+
+    /*Calculate the bitsPerFrame*/
+    bitsPerFrame = ((base->CTAR[commandStruct.whichCtar] & SPI_CTAR_FMSZ_MASK) >> SPI_CTAR_FMSZ_SHIFT) + 1;
+
+    txData = transfer->txData;
+    rxData = transfer->rxData;
+    remainingSendByteCount = transfer->dataSize;
+    remainingReceiveByteCount = transfer->dataSize;
+
+    if ((base->MCR & SPI_MCR_DIS_RXF_MASK) || (base->MCR & SPI_MCR_DIS_TXF_MASK))
+    {
+        fifoSize = 1;
+    }
+    else
+    {
+        fifoSize = FSL_FEATURE_DSPI_FIFO_SIZEn(base);
+    }
+
+    DSPI_StartTransfer(base);
+
+    if (bitsPerFrame <= 8)
+    {
+        while (remainingSendByteCount > 0)
+        {
+            if (remainingSendByteCount == 1)
+            {
+                while (!(DSPI_GetStatusFlags(base) & kDSPI_TxFifoFillRequestFlag))
+                {
+                    DSPI_ClearStatusFlags(base, kDSPI_TxFifoFillRequestFlag);
+                }
+
+                if (txData != NULL && tx_limit)
+                {
+                    base->PUSHR = (*txData) | (lastCommand);
+                    txData++;
+                    tx_limit--;
+                }
+                else
+                {
+                    base->PUSHR = (lastCommand) | (dummyData);
+                }
+                DSPI_ClearStatusFlags(base, kDSPI_TxFifoFillRequestFlag);
+                remainingSendByteCount--;
+
+                while (remainingReceiveByteCount > 0)
+                {
+                    if (DSPI_GetStatusFlags(base) & kDSPI_RxFifoDrainRequestFlag)
+                    {
+                        if (rxData != NULL && rx_limit)
+                        {
+                            /* Read data from POPR*/
+                            *(rxData) = DSPI_ReadData(base);
+                            rxData++;
+                            rx_limit--;
+                        }
+                        else
+                        {
+                            DSPI_ReadData(base);
+                        }
+                        remainingReceiveByteCount--;
+
+                        DSPI_ClearStatusFlags(base, kDSPI_RxFifoDrainRequestFlag);
+                    }
+                }
+            }
+            else
+            {
+                /*Wait until Tx Fifo is not full*/
+                while (!(DSPI_GetStatusFlags(base) & kDSPI_TxFifoFillRequestFlag))
+                {
+                    DSPI_ClearStatusFlags(base, kDSPI_TxFifoFillRequestFlag);
+                }
+                if (txData != NULL && tx_limit)
+                {
+                    base->PUSHR = command | (uint16_t)(*txData);
+                    txData++;
+                    tx_limit--;
+                }
+                else
+                {
+                    base->PUSHR = command | dummyData;
+                }
+                remainingSendByteCount--;
+
+                DSPI_ClearStatusFlags(base, kDSPI_TxFifoFillRequestFlag);
+
+                while ((remainingReceiveByteCount - remainingSendByteCount) >= fifoSize)
+                {
+                    if (DSPI_GetStatusFlags(base) & kDSPI_RxFifoDrainRequestFlag)
+                    {
+                        if (rxData != NULL && rx_limit)
+                        {
+                            *(rxData) = DSPI_ReadData(base);
+                            rxData++;
+                            rx_limit--;
+                        }
+                        else
+                        {
+                            DSPI_ReadData(base);
+                        }
+                        remainingReceiveByteCount--;
+
+                        DSPI_ClearStatusFlags(base, kDSPI_RxFifoDrainRequestFlag);
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        while (remainingSendByteCount > 0)
+        {
+            if (remainingSendByteCount <= 2)
+            {
+                while (!(DSPI_GetStatusFlags(base) & kDSPI_TxFifoFillRequestFlag))
+                {
+                    DSPI_ClearStatusFlags(base, kDSPI_TxFifoFillRequestFlag);
+                }
+
+                if (txData != NULL)
+                {
+                    wordToSend = *(txData);
+                    ++txData;
+
+                    if (remainingSendByteCount > 1)
+                    {
+                        wordToSend |= (unsigned)(*(txData)) << 8U;
+                        ++txData;
+                    }
+                }
+                else
+                {
+                    wordToSend = dummyData;
+                }
+
+                base->PUSHR = lastCommand | wordToSend;
+
+                DSPI_ClearStatusFlags(base, kDSPI_TxFifoFillRequestFlag);
+                remainingSendByteCount = 0;
+
+                while (remainingReceiveByteCount > 0)
+                {
+                    if (DSPI_GetStatusFlags(base) & kDSPI_RxFifoDrainRequestFlag)
+                    {
+                        wordReceived = DSPI_ReadData(base);
+
+                        if (remainingReceiveByteCount != 1)
+                        {
+                            if (rxData != NULL && rx_limit)
+                            {
+                                *(rxData) = wordReceived;
+                                ++rxData;
+                                *(rxData) = wordReceived >> 8;
+                                ++rxData;
+                            }
+                            remainingReceiveByteCount -= 2;
+                        }
+                        else
+                        {
+                            if (rxData != NULL)
+                            {
+                                *(rxData) = wordReceived;
+                                ++rxData;
+                            }
+                            remainingReceiveByteCount--;
+                        }
+                        DSPI_ClearStatusFlags(base, kDSPI_RxFifoDrainRequestFlag);
+                    }
+                }
+            }
+            else
+            {
+                /*Wait until Tx Fifo is not full*/
+                while (!(DSPI_GetStatusFlags(base) & kDSPI_TxFifoFillRequestFlag))
+                {
+                    DSPI_ClearStatusFlags(base, kDSPI_TxFifoFillRequestFlag);
+                }
+
+                if (txData != NULL)
+                {
+                    wordToSend = *(txData);
+                    ++txData;
+                    wordToSend |= (unsigned)(*(txData)) << 8U;
+                    ++txData;
+                }
+                else
+                {
+                    wordToSend = dummyData;
+                }
+                base->PUSHR = command | wordToSend;
+                remainingSendByteCount -= 2;
+
+                DSPI_ClearStatusFlags(base, kDSPI_TxFifoFillRequestFlag);
+
+                while (((remainingReceiveByteCount - remainingSendByteCount) / 2) >= fifoSize)
+                {
+                    if (DSPI_GetStatusFlags(base) & kDSPI_RxFifoDrainRequestFlag)
+                    {
+                        wordReceived = DSPI_ReadData(base);
+
+                        if (rxData != NULL)
+                        {
+                            *rxData = wordReceived;
+                            ++rxData;
+                            *rxData = wordReceived >> 8;
+                            ++rxData;
+                        }
+                        remainingReceiveByteCount -= 2;
+
+                        DSPI_ClearStatusFlags(base, kDSPI_RxFifoDrainRequestFlag);
+                    }
+                }
+            }
+        }
+    }
+
+    return kStatus_Success;
+}
+
 static void DSPI_MasterTransferPrepare(SPI_Type *base, dspi_master_handle_t *handle, dspi_transfer_t *transfer)
 {
     assert(handle);

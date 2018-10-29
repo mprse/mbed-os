@@ -142,7 +142,9 @@ uint32_t spi_frequency(spi_t *obj, uint32_t hz)
     uint32_t busClock = CLOCK_GetFreq(spi_clocks[obj->instance]);
     uint32_t actual_br = DSPI_MasterSetBaudRate(spi_address[obj->instance], kDSPI_Ctar0, (uint32_t)hz, busClock);
     //Half clock period delay after SPI transfer
-    DSPI_MasterSetDelayTimes(spi_address[obj->instance], kDSPI_Ctar0, kDSPI_LastSckToPcs, busClock, 500000000 / hz);
+    DSPI_MasterSetDelayTimes(spi_address[obj->instance], kDSPI_Ctar0, kDSPI_LastSckToPcs, busClock, 2 * (1000000000 / hz));
+    DSPI_MasterSetDelayTimes(spi_address[obj->instance], kDSPI_Ctar0, kDSPI_PcsToSck, busClock, 2 * (1000000000 / hz));
+    DSPI_MasterSetDelayTimes(spi_address[obj->instance], kDSPI_Ctar0, kDSPI_BetweenTransfer, busClock, 0);
     return actual_br;
 }
 
@@ -239,7 +241,7 @@ static void spi_set_symbol(spi_t *obj, void *to, uint32_t i, uint32_t val) {
 uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
                       void *rx_buffer, uint32_t rx_length, const void *fill) {
     uint32_t total = 0;
-    if (tx_length == 1 || rx_length == 1) {
+    if ((tx_length <= 1) && (rx_length <= 1)) {
         uint32_t val_o = 0;
         if (tx_length != 0) {
             val_o = spi_get_symbol(obj, tx_buffer, 0);
@@ -254,38 +256,18 @@ uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
         total = 1;
     } else {
         SPI_Type *spi = spi_address[obj->instance];
-        total = (tx_length < rx_length) ? tx_length : rx_length;
+        total = (tx_length > rx_length) ? tx_length : rx_length;
 
-        if (total != 0) {
-            DSPI_MasterTransferBlocking(spi, &(dspi_transfer_t){
-                  .txData = (uint8_t *)tx_buffer,
-                  .rxData = (uint8_t *)rx_buffer,
-                  .dataSize = total,
-                  .configFlags = kDSPI_MasterCtar0 | kDSPI_MasterPcs0 | kDSPI_MasterPcsContinuous,
-            });
-        }
+        // Default write is done in each and every call, in future can create HAL API instead
+        DSPI_SetDummyData(spi, *(uint32_t *)fill);
 
-        uint32_t transfer_size = 0;
-        if (tx_length > total) {
-            tx_buffer = ((uint8_t *)tx_buffer) + spi_symbol_size(obj)*total;
-            rx_buffer = NULL;
-            transfer_size = tx_length - total;
-            total = tx_length;
-        } else if (rx_length > total) {
-            // Default write is done in each and every call, in future can create HAL API instead
-            DSPI_SetDummyData(spi, *(uint32_t *)fill);
-
-            rx_buffer = ((uint8_t *)rx_buffer) + spi_symbol_size(obj)*total;
-            tx_buffer = NULL;
-            transfer_size = rx_length - total;
-            total = rx_length;
-        }
-        DSPI_MasterTransferBlocking(spi, &(dspi_transfer_t){
+        DSPI_TransferBlockingWithLimit(spi, &(dspi_transfer_t){
               .txData = (uint8_t *)tx_buffer,
               .rxData = (uint8_t *)rx_buffer,
-              .dataSize = transfer_size,
+              .dataSize = total * spi_symbol_size(obj),
               .configFlags = kDSPI_MasterCtar0 | kDSPI_MasterPcs0 | kDSPI_MasterPcsContinuous,
-        });
+        }, tx_length, rx_length);
+
         DSPI_ClearStatusFlags(spi, kDSPI_RxFifoDrainRequestFlag | kDSPI_EndOfQueueFlag);
     }
 
@@ -310,7 +292,7 @@ bool spi_transfer_async(spi_t *obj, const void *tx, uint32_t tx_len, void *rx, u
         if (DSPI_MasterTransferNonBlocking(spi, handle, &(dspi_transfer_t){
             .txData = (uint8_t *)tx,
             .rxData = (uint8_t *)rx,
-            .dataSize = len,
+            .dataSize = len * spi_symbol_size(obj),
             .configFlags = kDSPI_MasterCtar0 | kDSPI_MasterPcs0 | kDSPI_MasterPcsContinuous,
         }) != kStatus_Success) {
             return false;
@@ -322,7 +304,7 @@ bool spi_transfer_async(spi_t *obj, const void *tx, uint32_t tx_len, void *rx, u
         if (DSPI_SlaveTransferNonBlocking(spi, handle, &(dspi_transfer_t){
             .txData = (uint8_t *)tx,
             .rxData = (uint8_t *)rx,
-            .dataSize = len,
+            .dataSize = len * spi_symbol_size(obj),
             .configFlags = kDSPI_SlaveCtar0,
         }) != kStatus_Success) {
             return false;
