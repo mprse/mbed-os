@@ -19,7 +19,7 @@ import sys
 import os
 import re
 from os.path import abspath, join, dirname, relpath, sep
-import json
+import json, operator
 import traceback
 from fnmatch import translate
 from argparse import ArgumentParser
@@ -160,13 +160,16 @@ def icetea_tests(target, tcdir, verbose):
               + (['-v'] if verbose else [])
 
     stdout, stderr, returncode = run_cmd(command)
-
+    
+    list_json = json.loads(stdout)
+    list_json.sort(key=operator.itemgetter('name'))
+    
     if returncode != 0:
         raise Exception(
             "Error when running icetea. \ncwd:{} \nCommand:'{}' \noutput:{}".format(os.getcwd(), ' '.join(command),
                                                                                     stderr.decode()))
 
-    return json.loads(stdout)
+    return list_json
 
 
 def is_test_in_test_by_name(test_name, test_by_name):
