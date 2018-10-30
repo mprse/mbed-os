@@ -33,6 +33,282 @@ static SPI_Type *const spi_address[] = SPI_BASE_PTRS;
 /* Array of SPI bus clock frequencies */
 static clock_name_t const spi_clocks[] = SPI_CLOCK_FREQS;
 
+void wait_cycles(volatile int cycles)
+{
+    while(cycles--);
+}
+
+status_t DSPI_TransferBlockingLimit(SPI_Type *base, dspi_transfer_t *transfer, uint32_t tx_limit, uint32_t rx_limit, uint32_t dummy)
+{
+    assert(transfer);
+
+    uint16_t wordToSend = 0;
+    uint16_t wordReceived = 0;
+    uint8_t dummyData = (uint8_t)dummy;
+    uint8_t bitsPerFrame;
+
+    uint32_t command;
+    uint32_t lastCommand;
+
+    uint8_t *txData;
+    uint8_t *rxData;
+    uint32_t remainingSendByteCount;
+    uint32_t remainingReceiveByteCount;
+
+    uint32_t fifoSize;
+    dspi_command_data_config_t commandStruct;
+
+    /* If the transfer count is zero, then return immediately.*/
+    if (transfer->dataSize == 0)
+    {
+        return kStatus_InvalidArgument;
+    }
+
+    DSPI_StopTransfer(base);
+    DSPI_DisableInterrupts(base, kDSPI_AllInterruptEnable);
+    DSPI_FlushFifo(base, true, true);
+    DSPI_ClearStatusFlags(base, kDSPI_AllStatusFlag);
+
+    /*Calculate the command and lastCommand*/
+    commandStruct.whichPcs =
+        (dspi_which_pcs_t)(1U << ((transfer->configFlags & DSPI_MASTER_PCS_MASK) >> DSPI_MASTER_PCS_SHIFT));
+    commandStruct.isEndOfQueue = false;
+    commandStruct.clearTransferCount = false;
+    commandStruct.whichCtar =
+        (dspi_ctar_selection_t)((transfer->configFlags & DSPI_MASTER_CTAR_MASK) >> DSPI_MASTER_CTAR_SHIFT);
+    commandStruct.isPcsContinuous = (bool)(transfer->configFlags & kDSPI_MasterPcsContinuous);
+
+    command = DSPI_MasterGetFormattedCommand(&(commandStruct));
+
+    commandStruct.isEndOfQueue = true;
+    commandStruct.isPcsContinuous = (bool)(transfer->configFlags & kDSPI_MasterActiveAfterTransfer);
+    lastCommand = DSPI_MasterGetFormattedCommand(&(commandStruct));
+
+    /*Calculate the bitsPerFrame*/
+    bitsPerFrame = ((base->CTAR[commandStruct.whichCtar] & SPI_CTAR_FMSZ_MASK) >> SPI_CTAR_FMSZ_SHIFT) + 1;
+
+    txData = transfer->txData;
+    rxData = transfer->rxData;
+    remainingSendByteCount = transfer->dataSize;
+    remainingReceiveByteCount = transfer->dataSize;
+
+    if ((base->MCR & SPI_MCR_DIS_RXF_MASK) || (base->MCR & SPI_MCR_DIS_TXF_MASK))
+    {
+        fifoSize = 1;
+    }
+    else
+    {
+        fifoSize = FSL_FEATURE_DSPI_FIFO_SIZEn(base);
+    }
+
+    DSPI_StartTransfer(base);
+
+    if (bitsPerFrame <= 8)
+    {
+        while (remainingSendByteCount > 0)
+        {
+            if (remainingSendByteCount == 1)
+            {
+                while (!(DSPI_GetStatusFlags(base) & kDSPI_TxFifoFillRequestFlag))
+                {
+                    DSPI_ClearStatusFlags(base, kDSPI_TxFifoFillRequestFlag);
+                }
+
+                if (txData != NULL && tx_limit)
+                {
+                    base->PUSHR = (*txData) | (lastCommand);
+                    txData++;
+                    tx_limit--;
+                }
+                else
+                {
+                    base->PUSHR = (lastCommand) | (dummyData);
+                }
+                DSPI_ClearStatusFlags(base, kDSPI_TxFifoFillRequestFlag);
+                remainingSendByteCount--;
+
+                while (remainingReceiveByteCount > 0)
+                {
+                    if (DSPI_GetStatusFlags(base) & kDSPI_RxFifoDrainRequestFlag)
+                    {
+                        if (rxData != NULL && rx_limit)
+                        {
+                            /* Read data from POPR*/
+                            if (remainingReceiveByteCount == 1) wait_cycles(100); // workaround for last sym issue on slave
+                            *(rxData) = DSPI_ReadData(base);
+                            rxData++;
+                            rx_limit--;
+                        }
+                        else
+                        {
+                            DSPI_ReadData(base);
+                        }
+                        remainingReceiveByteCount--;
+
+                        DSPI_ClearStatusFlags(base, kDSPI_RxFifoDrainRequestFlag);
+                    }
+                }
+            }
+            else
+            {
+                /*Wait until Tx Fifo is not full*/
+                while (!(DSPI_GetStatusFlags(base) & kDSPI_TxFifoFillRequestFlag))
+                {
+                    DSPI_ClearStatusFlags(base, kDSPI_TxFifoFillRequestFlag);
+                }
+                if (txData != NULL && tx_limit)
+                {
+                    base->PUSHR = command | (uint16_t)(*txData);
+                    txData++;
+                    tx_limit--;
+                }
+                else
+                {
+                    base->PUSHR = command | dummyData;
+                }
+                remainingSendByteCount--;
+
+                DSPI_ClearStatusFlags(base, kDSPI_TxFifoFillRequestFlag);
+
+                while ((remainingReceiveByteCount - remainingSendByteCount) >= fifoSize)
+                {
+                    if (DSPI_GetStatusFlags(base) & kDSPI_RxFifoDrainRequestFlag)
+                    {
+                        if (rxData != NULL && rx_limit)
+                        {
+                            *(rxData) = DSPI_ReadData(base);
+                            rxData++;
+                            rx_limit--;
+                        }
+                        else
+                        {
+                            DSPI_ReadData(base);
+                        }
+                        remainingReceiveByteCount--;
+
+                        DSPI_ClearStatusFlags(base, kDSPI_RxFifoDrainRequestFlag);
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        while (remainingSendByteCount > 0)
+        {
+            if (remainingSendByteCount <= 2)
+            {
+                while (!(DSPI_GetStatusFlags(base) & kDSPI_TxFifoFillRequestFlag))
+                {
+                    DSPI_ClearStatusFlags(base, kDSPI_TxFifoFillRequestFlag);
+                }
+
+                if (txData != NULL && tx_limit)
+                {
+                    wordToSend = *(txData);
+                    ++txData;
+
+                    if (remainingSendByteCount > 1)
+                    {
+                        wordToSend |= (unsigned)(*(txData)) << 8U;
+                        ++txData;
+                        tx_limit--;
+                    }
+                }
+                else
+                {
+                    wordToSend = dummyData;
+                }
+
+                base->PUSHR = lastCommand | wordToSend;
+
+                DSPI_ClearStatusFlags(base, kDSPI_TxFifoFillRequestFlag);
+                remainingSendByteCount = 0;
+
+                while (remainingReceiveByteCount > 0)
+                {
+                    if (DSPI_GetStatusFlags(base) & kDSPI_RxFifoDrainRequestFlag)
+                    {
+                        if (remainingReceiveByteCount == 2) wait_cycles(100); // workaround for last sym issue on slave
+                        wordReceived = DSPI_ReadData(base);
+
+                        if (remainingReceiveByteCount != 1)
+                        {
+                            if (rxData != NULL && rx_limit)
+                            {
+                                *(rxData) = wordReceived;
+                                ++rxData;
+                                *(rxData) = wordReceived >> 8;
+                                ++rxData;
+                                rx_limit--;
+                            }
+                            remainingReceiveByteCount -= 2;
+                        }
+                        else
+                        {
+                            if (rxData != NULL && rx_limit)
+                            {
+                                *(rxData) = wordReceived;
+                                ++rxData;
+                                rx_limit--;
+                            }
+                            remainingReceiveByteCount--;
+                        }
+                        DSPI_ClearStatusFlags(base, kDSPI_RxFifoDrainRequestFlag);
+                    }
+                }
+            }
+            else
+            {
+                /*Wait until Tx Fifo is not full*/
+                while (!(DSPI_GetStatusFlags(base) & kDSPI_TxFifoFillRequestFlag))
+                {
+                    DSPI_ClearStatusFlags(base, kDSPI_TxFifoFillRequestFlag);
+                }
+
+                if (txData != NULL && tx_limit)
+                {
+                    wordToSend = *(txData);
+                    ++txData;
+                    wordToSend |= (unsigned)(*(txData)) << 8U;
+                    ++txData;
+                    tx_limit--;
+                }
+                else
+                {
+                    wordToSend = dummyData;
+                }
+                base->PUSHR = command | wordToSend;
+                remainingSendByteCount -= 2;
+
+                DSPI_ClearStatusFlags(base, kDSPI_TxFifoFillRequestFlag);
+
+                while (((remainingReceiveByteCount - remainingSendByteCount) / 2) >= fifoSize)
+                {
+                    if (DSPI_GetStatusFlags(base) & kDSPI_RxFifoDrainRequestFlag)
+                    {
+                        wordReceived = DSPI_ReadData(base);
+
+                        if (rxData != NULL && rx_limit)
+                        {
+                            *rxData = wordReceived;
+                            ++rxData;
+                            *rxData = wordReceived >> 8;
+                            ++rxData;
+                            rx_limit--;
+                        }
+                        remainingReceiveByteCount -= 2;
+
+                        DSPI_ClearStatusFlags(base, kDSPI_RxFifoDrainRequestFlag);
+                    }
+                }
+            }
+        }
+    }
+
+    return kStatus_Success;
+}
+
 void spi_get_capabilities(SPIName name, PinName ssel, spi_capabilities_t *cap)
 {
     cap->word_length = 0x00008080;
@@ -142,7 +418,9 @@ uint32_t spi_frequency(spi_t *obj, uint32_t hz)
     uint32_t busClock = CLOCK_GetFreq(spi_clocks[obj->instance]);
     uint32_t actual_br = DSPI_MasterSetBaudRate(spi_address[obj->instance], kDSPI_Ctar0, (uint32_t)hz, busClock);
     //Half clock period delay after SPI transfer
-    DSPI_MasterSetDelayTimes(spi_address[obj->instance], kDSPI_Ctar0, kDSPI_LastSckToPcs, busClock, 500000000 / hz);
+    DSPI_MasterSetDelayTimes(spi_address[obj->instance], kDSPI_Ctar0, kDSPI_LastSckToPcs, busClock, 2 * (1000000000 / hz));
+    DSPI_MasterSetDelayTimes(spi_address[obj->instance], kDSPI_Ctar0, kDSPI_PcsToSck, busClock, 2 * (1000000000 / hz));
+    DSPI_MasterSetDelayTimes(spi_address[obj->instance], kDSPI_Ctar0, kDSPI_BetweenTransfer, busClock, 0);
     return actual_br;
 }
 
@@ -239,7 +517,8 @@ static void spi_set_symbol(spi_t *obj, void *to, uint32_t i, uint32_t val) {
 uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
                       void *rx_buffer, uint32_t rx_length, const void *fill) {
     uint32_t total = 0;
-    if (tx_length == 1 || rx_length == 1) {
+    if ((tx_length == 0) && (rx_length == 0)) { return 0; }
+    else if ((tx_length <= 1) && (rx_length <= 1)) {
         uint32_t val_o = 0;
         if (tx_length != 0) {
             val_o = spi_get_symbol(obj, tx_buffer, 0);
@@ -254,38 +533,15 @@ uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
         total = 1;
     } else {
         SPI_Type *spi = spi_address[obj->instance];
-        total = (tx_length < rx_length) ? tx_length : rx_length;
+        total = (tx_length > rx_length) ? tx_length : rx_length;
 
-        if (total != 0) {
-            DSPI_MasterTransferBlocking(spi, &(dspi_transfer_t){
-                  .txData = (uint8_t *)tx_buffer,
-                  .rxData = (uint8_t *)rx_buffer,
-                  .dataSize = total,
-                  .configFlags = kDSPI_MasterCtar0 | kDSPI_MasterPcs0 | kDSPI_MasterPcsContinuous,
-            });
-        }
-
-        uint32_t transfer_size = 0;
-        if (tx_length > total) {
-            tx_buffer = ((uint8_t *)tx_buffer) + spi_symbol_size(obj)*total;
-            rx_buffer = NULL;
-            transfer_size = tx_length - total;
-            total = tx_length;
-        } else if (rx_length > total) {
-            // Default write is done in each and every call, in future can create HAL API instead
-            DSPI_SetDummyData(spi, *(uint32_t *)fill);
-
-            rx_buffer = ((uint8_t *)rx_buffer) + spi_symbol_size(obj)*total;
-            tx_buffer = NULL;
-            transfer_size = rx_length - total;
-            total = rx_length;
-        }
-        DSPI_MasterTransferBlocking(spi, &(dspi_transfer_t){
+        DSPI_TransferBlockingLimit(spi, &(dspi_transfer_t){
               .txData = (uint8_t *)tx_buffer,
               .rxData = (uint8_t *)rx_buffer,
-              .dataSize = transfer_size,
+              .dataSize = total * spi_symbol_size(obj),
               .configFlags = kDSPI_MasterCtar0 | kDSPI_MasterPcs0 | kDSPI_MasterPcsContinuous,
-        });
+        }, tx_length, rx_length, *(uint32_t *)fill);
+
         DSPI_ClearStatusFlags(spi, kDSPI_RxFifoDrainRequestFlag | kDSPI_EndOfQueueFlag);
     }
 
@@ -310,7 +566,7 @@ bool spi_transfer_async(spi_t *obj, const void *tx, uint32_t tx_len, void *rx, u
         if (DSPI_MasterTransferNonBlocking(spi, handle, &(dspi_transfer_t){
             .txData = (uint8_t *)tx,
             .rxData = (uint8_t *)rx,
-            .dataSize = len,
+            .dataSize = len * spi_symbol_size(obj),
             .configFlags = kDSPI_MasterCtar0 | kDSPI_MasterPcs0 | kDSPI_MasterPcsContinuous,
         }) != kStatus_Success) {
             return false;
@@ -322,7 +578,7 @@ bool spi_transfer_async(spi_t *obj, const void *tx, uint32_t tx_len, void *rx, u
         if (DSPI_SlaveTransferNonBlocking(spi, handle, &(dspi_transfer_t){
             .txData = (uint8_t *)tx,
             .rxData = (uint8_t *)rx,
-            .dataSize = len,
+            .dataSize = len * spi_symbol_size(obj),
             .configFlags = kDSPI_SlaveCtar0,
         }) != kStatus_Success) {
             return false;
