@@ -76,6 +76,7 @@ struct spi_s {
     uint8_t bits;
     bool is_slave;
     spi_bit_ordering_t order;
+    bool initialised;
 #if DEVICE_SPI_ASYNCH
     spi_async_handler_f handler;
     void *ctx;
