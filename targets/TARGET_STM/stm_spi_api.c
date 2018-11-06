@@ -334,8 +334,12 @@ void spi_free(spi_t *obj)
     spi_inst_cache[idx].name = 0;
 
     // Configure GPIOs
-    pin_function(spiobj->pin_miso, STM_PIN_DATA(STM_MODE_INPUT, GPIO_NOPULL, 0));
-    pin_function(spiobj->pin_mosi, STM_PIN_DATA(STM_MODE_INPUT, GPIO_NOPULL, 0));
+    if (spiobj->pin_miso != NC) {
+        pin_function(spiobj->pin_miso, STM_PIN_DATA(STM_MODE_INPUT, GPIO_NOPULL, 0));
+    }
+    if (spiobj->pin_mosi != NC) {
+        pin_function(spiobj->pin_mosi, STM_PIN_DATA(STM_MODE_INPUT, GPIO_NOPULL, 0));
+    }
     pin_function(spiobj->pin_sclk, STM_PIN_DATA(STM_MODE_INPUT, GPIO_NOPULL, 0));
     if (handle->Init.NSS != SPI_NSS_SOFT) {
         pin_function(spiobj->pin_ssel, STM_PIN_DATA(STM_MODE_INPUT, GPIO_NOPULL, 0));
@@ -520,11 +524,7 @@ static void spi_master_start_asynch_transfer(spi_t *obj, transfer_type_t transfe
 
     obj->transfer_type = transfer_type;
 
-    if (is16bit) {
-        words = length / 2;
-    } else {
-        words = length;
-    }
+    words = length;
 
     // enable the interrupt
     IRQn_Type irq_n = spiobj->spiIRQ;

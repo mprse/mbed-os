@@ -358,11 +358,15 @@ void spi_init(spi_t *obj, bool is_slave, PinName mosi, PinName miso, PinName scl
         pinmap_pinout(ssel, PinMap_SPI_SSEL);
     }
     obj->is_slave = is_slave;
+    obj->initialised = false;
 }
 
 void spi_free(spi_t *obj)
 {
-    DSPI_Deinit(spi_address[obj->instance]);
+    if (obj->initialised) {
+        DSPI_Deinit(spi_address[obj->instance]);
+        obj->initialised = false;
+    }
 }
 
 void spi_format(spi_t *obj, uint8_t bits, spi_mode_t mode, spi_bit_ordering_t bit_ordering)
@@ -411,6 +415,8 @@ void spi_format(spi_t *obj, uint8_t bits, spi_mode_t mode, spi_bit_ordering_t bi
 
         DSPI_MasterInit(spi_address[obj->instance], &master_config, CLOCK_GetFreq(spi_clocks[obj->instance]));
     }
+
+    obj->initialised = true;
 }
 
 uint32_t spi_frequency(spi_t *obj, uint32_t hz)
