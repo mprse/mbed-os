@@ -80,8 +80,14 @@ class SPI : private NonCopyable<SPI> {
 protected:
     struct spi_peripheral_s {
         SPIName name;
+        PinName miso;
+        PinName mosi;
+        PinName sclk;
+        PinName ssel;
+
         spi_t spi;
-        PlatformMutex *mutex;
+        SingletonPtr<PlatformMutex> mutex;
+
         SPI *owner;
     };
 public:
@@ -111,7 +117,7 @@ public:
      * @endcode
      */
     void format(int bits, int mode = 0);
-    void format(uint8_t bits, spi_mode_t mode = SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, bool msb_first = true);
+    void format(uint8_t bits, spi_mode_t mode = SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, spi_bit_ordering_t bit_order = SPI_BIT_ORDERING_MSB_FIRST);
 
     /** Set the spi bus clock frequency
      *
@@ -311,8 +317,8 @@ protected:
     // Configuration.
     uint8_t _bits;
     spi_mode_t _mode;
-    bool _msb_first;
-    int _hz;
+    spi_bit_ordering_t _bit_order;
+    uint32_t _hz;
     uint32_t _write_fill;
 };
 

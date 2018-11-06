@@ -37,35 +37,34 @@ SPI::SPI(PinName mosi, PinName miso, PinName sclk, PinName ssel) :
 #endif
     _bits(8),
     _mode(SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE),
-    _msb_first(true),
+    _bit_order(SPI_BIT_ORDERING_MSB_FIRST),
     _hz(1000000),
     _write_fill(0xFF)
 {
     // No lock needed in the constructor
-    // get_module
-
     SPIName name = spi_get_module(mosi, miso, sclk);
-
-    // this is a lazy allocation for the mutex.
-    // unless not assigned to a peripheral, this mutex will never be deleted.
-    PlatformMutex *mutex = new PlatformMutex();
 
     core_util_critical_section_enter();
     // lookup in a critical section if we already have it else initialize it
+
     _self = SPI::lookup(name, true);
-    if (_self->mutex == NULL) {
-        _self->mutex = mutex;
-    }
     if (_self->name == 0) {
         _self->name = name;
+        _self->miso = miso;
+        _self->mosi = mosi;
+        _self->sclk = sclk;
+        _self->ssel = ssel;
+
+        MBED_ASSERT(ssel == NC);
+        // TODO: ssel managment is no supported yet here.
         spi_init(&_self->spi, false, mosi, miso, sclk, NC);
+    } else {
+        MBED_ASSERT(_self->miso == miso);
+        MBED_ASSERT(_self->mosi == mosi);
+        MBED_ASSERT(_self->sclk == sclk);
+        MBED_ASSERT(_self->ssel == ssel);
     }
     core_util_critical_section_exit();
-
-    if (_self->mutex != mutex) {
-        delete mutex;
-    }
-
     // we don't need to _acquire at this stage.
     // this will be done anyway before any operation.
 }
@@ -75,38 +74,31 @@ struct SPI::spi_peripheral_s *SPI::lookup(SPIName name, bool or_last) {
     core_util_critical_section_enter();
     for (uint32_t idx = 0; idx < SPI_COUNT; idx++) {
         if ((_peripherals[idx].name == name) ||
-            (_peripherals[idx].name == 0)) {
+            ((_peripherals[idx].name == 0) && or_last)) {
             result = &_peripherals[idx];
             break;
         }
-        // XXX: we may want to ensure that it was previously initialized with the same mosi/miso/sclk/ss pins
     }
-    if (!or_last && (result != NULL) && (result->name == 0)) {
-        result = NULL;
-    }
-
     core_util_critical_section_exit();
     return result;
 }
 
 void SPI::format(int bits, int mode)
 {
-    format(bits, (spi_mode_t)mode, true);
+    format(bits, (spi_mode_t)mode, SPI_BIT_ORDERING_MSB_FIRST);
 }
 
-void SPI::format(uint8_t bits, spi_mode_t mode, bool msb_first)
+void SPI::format(uint8_t bits, spi_mode_t mode, spi_bit_ordering_t bit_order)
 {
     lock();
     _bits = bits;
     _mode = mode;
-    _msb_first = msb_first;
+    _bit_order = bit_order;
     // If changing format while you are the owner then just
     // update format, but if owner is changed then even frequency should be
     // updated which is done by acquire.
     if (_self->owner == this) {
-        spi_format(&_self->spi, _bits, _mode, _msb_first?SPI_BIT_ORDERING_MSB_FIRST:SPI_BIT_ORDERING_LSB_FIRST);
-    } else {
-        _acquire();
+        spi_format(&_self->spi, _bits, _mode, _bit_order);
     }
     unlock();
 }
@@ -141,7 +133,7 @@ uint32_t SPI::_acquire()
 {
     uint32_t actual_hz = 0;
     if (_self->owner != this) {
-        spi_format(&_self->spi, _bits, _mode, _msb_first?SPI_BIT_ORDERING_MSB_FIRST:SPI_BIT_ORDERING_LSB_FIRST);
+        spi_format(&_self->spi, _bits, _mode, _bit_order);
         actual_hz = spi_frequency(&_self->spi, _hz);
         _self->owner = this;
     }
