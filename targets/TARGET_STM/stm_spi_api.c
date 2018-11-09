@@ -355,6 +355,7 @@ void spi_format(spi_t *obj, uint8_t bits, spi_mode_t mode, spi_bit_ordering_t bi
 
     // Save new values
     handle->Init.DataSize          = (bits == 16) ? SPI_DATASIZE_16BIT : SPI_DATASIZE_8BIT;
+    handle->Init.FirstBit          = (bit_ordering == SPI_BIT_ORDERING_MSB_FIRST) ? SPI_FIRSTBIT_MSB : SPI_FIRSTBIT_LSB;
 
     switch (mode) {
         case 0:
