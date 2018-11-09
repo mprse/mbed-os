@@ -369,56 +369,6 @@ void spi_free(spi_t *obj)
     }
 }
 
-void spi_format(spi_t *obj, uint8_t bits, spi_mode_t mode, spi_bit_ordering_t bit_ordering)
-{
-
-    dspi_master_config_t master_config;
-    dspi_slave_config_t slave_config;
-    dspi_clock_polarity_t cpol;
-    dspi_clock_phase_t cpha;
-
-    if ((mode == SPI_MODE_IDLE_HIGH_SAMPLE_FIRST_EDGE) ||
-        (mode == SPI_MODE_IDLE_HIGH_SAMPLE_SECOND_EDGE)) {
-            cpol = kDSPI_ClockPolarityActiveLow;
-    } else {
-            cpol = kDSPI_ClockPolarityActiveHigh;
-    }
-    if ((mode == SPI_MODE_IDLE_HIGH_SAMPLE_FIRST_EDGE) ||
-        (mode == SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE)) {
-            cpha = kDSPI_ClockPhaseFirstEdge;
-    } else {
-            cpha = kDSPI_ClockPhaseSecondEdge;
-    }
-
-    /* Bits: values between 4 and 16 are valid */
-    MBED_ASSERT(bits >= 4 && bits <= 16);
-    obj->bits = bits;
-    obj->order = bit_ordering;
-
-    if (obj->is_slave) {
-        /* Slave config */
-        DSPI_SlaveGetDefaultConfig(&slave_config);
-        slave_config.whichCtar = kDSPI_Ctar0;
-        slave_config.ctarConfig.bitsPerFrame = (uint32_t)bits;
-        slave_config.ctarConfig.cpol = cpol;
-        slave_config.ctarConfig.cpha = cpha;
-
-        DSPI_SlaveInit(spi_address[obj->instance], &slave_config);
-    } else {
-        /* Master config */
-        DSPI_MasterGetDefaultConfig(&master_config);
-        master_config.ctarConfig.bitsPerFrame = (uint32_t)bits;
-        master_config.ctarConfig.cpol = cpol;
-        master_config.ctarConfig.cpha = cpha;
-        master_config.ctarConfig.direction = (bit_ordering == SPI_BIT_ORDERING_MSB_FIRST)? kDSPI_MsbFirst : kDSPI_LsbFirst;
-        master_config.ctarConfig.pcsToSckDelayInNanoSec = 0;
-
-        DSPI_MasterInit(spi_address[obj->instance], &master_config, CLOCK_GetFreq(spi_clocks[obj->instance]));
-    }
-
-    obj->initialised = true;
-}
-
 uint32_t spi_frequency(spi_t *obj, uint32_t hz)
 {
     uint32_t busClock = CLOCK_GetFreq(spi_clocks[obj->instance]);
@@ -552,6 +502,67 @@ uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
     }
 
     return total;
+}
+
+void spi_format(spi_t *obj, uint8_t bits, spi_mode_t mode, spi_bit_ordering_t bit_ordering)
+{
+
+    dspi_master_config_t master_config;
+    dspi_slave_config_t slave_config;
+    dspi_clock_polarity_t cpol;
+    dspi_clock_phase_t cpha;
+
+    if ((mode == SPI_MODE_IDLE_HIGH_SAMPLE_FIRST_EDGE) ||
+        (mode == SPI_MODE_IDLE_HIGH_SAMPLE_SECOND_EDGE)) {
+            cpol = kDSPI_ClockPolarityActiveLow;
+    } else {
+            cpol = kDSPI_ClockPolarityActiveHigh;
+    }
+    if ((mode == SPI_MODE_IDLE_HIGH_SAMPLE_FIRST_EDGE) ||
+        (mode == SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE)) {
+            cpha = kDSPI_ClockPhaseFirstEdge;
+    } else {
+            cpha = kDSPI_ClockPhaseSecondEdge;
+    }
+
+    /* Bits: values between 4 and 16 are valid */
+    MBED_ASSERT(bits >= 4 && bits <= 16);
+    obj->bits = bits;
+    obj->order = bit_ordering;
+
+    if (obj->is_slave) {
+        /* Slave config */
+        DSPI_SlaveGetDefaultConfig(&slave_config);
+        slave_config.whichCtar = kDSPI_Ctar0;
+        slave_config.ctarConfig.bitsPerFrame = (uint32_t)bits;
+        slave_config.ctarConfig.cpol = cpol;
+        slave_config.ctarConfig.cpha = cpha;
+
+        DSPI_SlaveInit(spi_address[obj->instance], &slave_config);
+    } else {
+        /* Master config */
+        DSPI_MasterGetDefaultConfig(&master_config);
+        master_config.ctarConfig.bitsPerFrame = (uint32_t)bits;
+        master_config.ctarConfig.cpol = cpol;
+        master_config.ctarConfig.cpha = cpha;
+        master_config.ctarConfig.direction = (bit_ordering == SPI_BIT_ORDERING_MSB_FIRST)? kDSPI_MsbFirst : kDSPI_LsbFirst;
+        master_config.ctarConfig.pcsToSckDelayInNanoSec = 0;
+
+        DSPI_MasterInit(spi_address[obj->instance], &master_config, CLOCK_GetFreq(spi_clocks[obj->instance]));
+    }
+
+    /* In case when clock idle high state is selected, the driver does not set the
+     * clk to high state after init, but just before first transmission.
+     * This causes problems since clk is down, when cs is asserted during the first transfer.
+     * This workaround transmits dummy symbol after inti, so the clk value is correctly set later.
+     */
+    if ((mode == SPI_MODE_IDLE_HIGH_SAMPLE_FIRST_EDGE) ||
+        (mode == SPI_MODE_IDLE_HIGH_SAMPLE_SECOND_EDGE)) {
+        uint8_t buf = 0;
+        spi_transfer(obj, &buf, 1, &buf, 1, &buf);
+    }
+
+    obj->initialised = true;
 }
 
 bool spi_transfer_async(spi_t *obj, const void *tx, uint32_t tx_len, void *rx, uint32_t rx_len,
