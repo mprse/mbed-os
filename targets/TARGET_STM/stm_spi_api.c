@@ -475,11 +475,32 @@ uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
     uint32_t i = 0;
     if (handle->Init.Direction == SPI_DIRECTION_2LINES) {
         for (i = 0; i < total; i++) {
-            // FIXME: handle various data size
-            uint32_t out = (i < tx_length) ? ((uint8_t *)tx_buffer)[i] : *(uint8_t *)write_fill;
-            uint32_t in = spi_write(obj, out);
-            if (i < rx_length) {
-                ((uint8_t*)rx_buffer)[i] = (uint8_t)in;
+            uint32_t out, in;
+            switch (handle->Init.DataSize) {
+                case SPI_DATASIZE_8BIT:
+                    if (tx_buffer) {
+                        out = (i < tx_length) ? ((uint8_t *)tx_buffer)[i] : *(uint8_t *)write_fill;
+                    } else {
+                        out = *(uint8_t *)write_fill;
+                    }
+                    in = spi_write(obj, out);
+                    if (i < rx_length) {
+                        ((uint8_t*)rx_buffer)[i] = (uint8_t)in;
+                    }
+                    break;
+                case SPI_DATASIZE_16BIT:
+                    if (tx_buffer) {
+                        out = (i < tx_length) ? ((uint16_t *)tx_buffer)[i] : *(uint16_t *)write_fill;
+                    } else {
+                        out = *(uint16_t *)write_fill;
+                    }
+                    in = spi_write(obj, out);
+                    if (i < rx_length) {
+                        ((uint16_t*)rx_buffer)[i] = (uint16_t)in;
+                    }
+                    break;
+                default:
+                    break;
             }
         }
     } else {
