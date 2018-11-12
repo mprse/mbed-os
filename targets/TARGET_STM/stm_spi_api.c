@@ -291,10 +291,18 @@ void spi_init(spi_t *obj, bool is_slave, PinName mosi, PinName miso, PinName scl
     handle->Init.Mode = is_slave ? SPI_MODE_SLAVE : SPI_MODE_MASTER;
     handle->Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256;
 
-    if (miso != NC) {
-        handle->Init.Direction     = SPI_DIRECTION_2LINES;
+    if (is_slave) {
+        if (mosi != NC) {
+            handle->Init.Direction     = SPI_DIRECTION_2LINES;
+        } else {
+            handle->Init.Direction     = SPI_DIRECTION_1LINE;
+        }
     } else {
-        handle->Init.Direction     = SPI_DIRECTION_1LINE;
+        if (miso != NC) {
+            handle->Init.Direction     = SPI_DIRECTION_2LINES;
+        } else {
+            handle->Init.Direction     = SPI_DIRECTION_1LINE;
+        }
     }
 
     handle->Init.CLKPhase          = SPI_PHASE_1EDGE;
@@ -508,17 +516,41 @@ uint32_t spi_transfer(spi_t *obj, const void *tx_buffer, uint32_t tx_length,
         }
     } else {
         /* In case of 1 WIRE only, first handle TX, then Rx */
-        // FIXME: or the other way in slave mode ?
-        if (tx_length != 0) {
-            if (HAL_OK != HAL_SPI_Transmit(handle, (uint8_t *)tx_buffer, tx_length, tx_length * TIMEOUT_1_BYTE)) {
-                /*  report an error */
-                total = 0;
+
+        total = tx_length + rx_length;
+
+        if (handle->Init.Mode == SPI_MODE_MASTER) {
+            if (tx_length != 0) {
+                int ret = HAL_SPI_Transmit(handle, (uint8_t *)tx_buffer, tx_length, tx_length * TIMEOUT_1_BYTE);
+                if (HAL_OK != ret) {
+                    /*  report an error */
+                    printf("error 1 %d \r\n", ret);
+                    total = 0;
+                }
             }
-        }
-        if (rx_length != 0) {
-            if (HAL_OK != HAL_SPI_Receive(handle, (uint8_t *)rx_buffer, rx_length, rx_length * TIMEOUT_1_BYTE)) {
-                /*  report an error */
-                total = 0;
+            if (rx_length != 0) {
+                if (HAL_OK != HAL_SPI_Receive(handle, (uint8_t *)rx_buffer, rx_length, rx_length * TIMEOUT_1_BYTE)) {
+                    /*  report an error */
+                    total = 0;
+                    printf("error 2\r\n");
+                }
+            }
+        } else {
+            if (rx_length != 0) {
+                int ret = HAL_SPI_Receive(handle, (uint8_t *)rx_buffer, rx_length, HAL_MAX_DELAY);
+                if (HAL_OK != ret) {
+                    /*  report an error */
+                    total = 0;
+                    printf("error 3 %d \r\n", ret);
+                }
+            }
+            if (tx_length != 0) {
+                int ret = HAL_SPI_Transmit(handle, (uint8_t *)tx_buffer, tx_length, HAL_MAX_DELAY);
+                if (HAL_OK != ret) {
+                    /*  report an error */
+                    total = 0;
+                    printf("error 4 %d \r\n", ret);
+                }
             }
         }
     }
