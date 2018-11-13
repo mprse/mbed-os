@@ -16,7 +16,7 @@
 #include "drivers/SPI.h"
 #include "platform/mbed_critical.h"
 
-#if DEVICE_SPI_ASYNCH
+#if DEVICE_SPI_ASYNCH && 0
 #include "platform/mbed_power_mgmt.h"
 #endif
 
@@ -24,94 +24,138 @@
 
 namespace mbed {
 
-#if DEVICE_SPI_ASYNCH && TRANSACTION_QUEUE_SIZE_SPI
+#if DEVICE_SPI_ASYNCH && TRANSACTION_QUEUE_SIZE_SPI && 0
 CircularBuffer<Transaction<SPI>, TRANSACTION_QUEUE_SIZE_SPI> SPI::_transaction_buffer;
 #endif
 
+SPI::spi_peripheral_s SPI::_peripherals[SPI_COUNT];
+
 SPI::SPI(PinName mosi, PinName miso, PinName sclk, PinName ssel) :
-    _spi(),
-#if DEVICE_SPI_ASYNCH
-    _irq(this),
+    _peripheral(NULL),
+#if DEVICE_SPI_ASYNCH && 0
     _usage(DMA_USAGE_NEVER),
     _deep_sleep_locked(false),
 #endif
     _bits(8),
-    _mode(0),
+    _mode(SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE),
+    _bit_order(SPI_BIT_ORDERING_MSB_FIRST),
     _hz(1000000),
     _write_fill(SPI_FILL_CHAR)
 {
     // No lock needed in the constructor
-    spi_init(&_spi, mosi, miso, sclk, ssel);
+    SPIName name = spi_get_module(mosi, miso, sclk);
+
+    core_util_critical_section_enter();
+    // lookup in a critical section if we already have it else initialize it
+
+    _peripheral = SPI::_lookup(name, true);
+    if (_peripheral->name == 0) {
+        _peripheral->name = name;
+        _peripheral->miso = miso;
+        _peripheral->mosi = mosi;
+        _peripheral->sclk = sclk;
+        _peripheral->ssel = ssel;
+
+        MBED_ASSERT(ssel == NC);
+        // TODO: ssel managment is not supported yet.
+        spi_init(&_peripheral->spi, false, mosi, miso, sclk, NC);
+    } else {
+        MBED_ASSERT(_peripheral->miso == miso);
+        MBED_ASSERT(_peripheral->mosi == mosi);
+        MBED_ASSERT(_peripheral->sclk == sclk);
+        MBED_ASSERT(_peripheral->ssel == ssel);
+    }
+    core_util_critical_section_exit();
+    // we don't need to _acquire at this stage.
+    // this will be done anyway before any operation.
 }
 
 SPI::~SPI()
 {
-    if (_owner == this) {
-        _owner = NULL;
-    }
-}
-
-void SPI::format(int bits, int mode)
-{
     lock();
-    _bits = bits;
-    _mode = mode;
-    // If changing format while you are the owner then just
-    // update format, but if owner is changed then even frequency should be
-    // updated which is done by acquire.
-    if (_owner == this) {
-        spi_format(&_spi, _bits, _mode, 0);
-    } else {
-        _acquire();
+    if (_peripheral->owner == this) {
+        _peripheral->owner = NULL;
     }
     unlock();
 }
 
-void SPI::frequency(int hz)
+struct SPI::spi_peripheral_s *SPI::_lookup(SPIName name, bool or_last) {
+    struct SPI::spi_peripheral_s *result = NULL;
+    core_util_critical_section_enter();
+    for (uint32_t idx = 0; idx < SPI_COUNT; idx++) {
+        if ((_peripherals[idx].name == name) ||
+            ((_peripherals[idx].name == 0) && or_last)) {
+            result = &_peripherals[idx];
+            break;
+        }
+    }
+    core_util_critical_section_exit();
+    return result;
+}
+
+void SPI::format(int bits, int mode)
 {
+    format(bits, (spi_mode_t)mode, SPI_BIT_ORDERING_MSB_FIRST);
+}
+
+void SPI::format(uint8_t bits, spi_mode_t mode, spi_bit_ordering_t bit_order)
+{
+    lock();
+    _bits = bits;
+    _mode = mode;
+    _bit_order = bit_order;
+    // If changing format while you are the owner then just
+    // update format, but if owner is changed then even frequency should be
+    // updated which is done by acquire.
+    if (_peripheral->owner == this) {
+        spi_format(&_peripheral->spi, _bits, _mode, _bit_order);
+    }
+    unlock();
+}
+
+uint32_t SPI::frequency(uint32_t hz)
+{
+    uint32_t actual_hz;
     lock();
     _hz = hz;
     // If changing format while you are the owner then just
     // update frequency, but if owner is changed then even frequency should be
     // updated which is done by acquire.
-    if (_owner == this) {
-        spi_frequency(&_spi, _hz);
+    if (_peripheral->owner == this) {
+        actual_hz = spi_frequency(&_peripheral->spi, _hz);
     } else {
-        _acquire();
+        actual_hz = _acquire();
     }
     unlock();
+    return actual_hz;
 }
 
-SPI *SPI::_owner = NULL;
-SingletonPtr<PlatformMutex> SPI::_mutex;
 
-// ignore the fact there are multiple physical spis, and always update if it wasn't us last
-void SPI::aquire()
+void SPI::acquire()
 {
     lock();
-    if (_owner != this) {
-        spi_format(&_spi, _bits, _mode, 0);
-        spi_frequency(&_spi, _hz);
-        _owner = this;
-    }
+    _acquire();
     unlock();
 }
 
 // Note: Private function with no locking
-void SPI::_acquire()
+uint32_t SPI::_acquire()
 {
-    if (_owner != this) {
-        spi_format(&_spi, _bits, _mode, 0);
-        spi_frequency(&_spi, _hz);
-        _owner = this;
+    uint32_t actual_hz = 0;
+    if (_peripheral->owner != this) {
+        spi_format(&_peripheral->spi, _bits, _mode, _bit_order);
+        actual_hz = spi_frequency(&_peripheral->spi, _hz);
+        _peripheral->owner = this;
     }
+    return actual_hz;
 }
 
 int SPI::write(int value)
 {
     lock();
     _acquire();
-    int ret = spi_master_write(&_spi, value);
+    uint32_t ret = 0;
+    spi_transfer(&_peripheral->spi, &value, (_bits+7)/8, &ret, (_bits+7)/8, NULL);
     unlock();
     return ret;
 }
@@ -120,29 +164,29 @@ int SPI::write(const char *tx_buffer, int tx_length, char *rx_buffer, int rx_len
 {
     lock();
     _acquire();
-    int ret = spi_master_block_write(&_spi, tx_buffer, tx_length, rx_buffer, rx_length, _write_fill);
+    int ret = spi_transfer(&_peripheral->spi, tx_buffer, tx_length, rx_buffer, rx_length, &_write_fill);
     unlock();
     return ret;
 }
 
 void SPI::lock()
 {
-    _mutex->lock();
+    _peripheral->mutex->lock();
 }
 
 void SPI::unlock()
 {
-    _mutex->unlock();
+    _peripheral->mutex->unlock();
 }
 
 void SPI::set_default_write_value(char data)
 {
     lock();
-    _write_fill = data;
+    _write_fill = (uint32_t)data;
     unlock();
 }
 
-#if DEVICE_SPI_ASYNCH
+#if DEVICE_SPI_ASYNCH && 0
 
 int SPI::transfer(const void *tx_buffer, int tx_length, void *rx_buffer, int rx_length, unsigned char bit_width, const event_callback_t &callback, int event)
 {
@@ -273,8 +317,8 @@ void SPI::irq_handler_asynch(void)
 #endif
 }
 
-#endif
+#endif // DEVICE_SPI_ASYNCH
 
 } // namespace mbed
 
-#endif
+#endif // DEVICE_SPI

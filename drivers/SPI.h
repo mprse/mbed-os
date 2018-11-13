@@ -25,16 +25,19 @@
 #include "platform/SingletonPtr.h"
 #include "platform/NonCopyable.h"
 
-#if DEVICE_SPI_ASYNCH
+#if DEVICE_SPI_ASYNCH && 0
 #include "platform/CThunk.h"
 #include "hal/dma_api.h"
 #include "platform/CircularBuffer.h"
 #include "platform/FunctionPointer.h"
 #include "platform/Transaction.h"
-#endif
+#endif // DEVICE_SPI_ASYNCH
 
 namespace mbed {
 /** \addtogroup drivers */
+
+#define SPI_FILL_CHAR       0xFFFFFFFF
+#define SPI_EVENT_COMPLETE  0
 
 /** A SPI Master, used for communicating with SPI slave devices.
  *
@@ -109,12 +112,13 @@ public:
      * @endcode
      */
     void format(int bits, int mode = 0);
+    void format(uint8_t bits, spi_mode_t mode = SPI_MODE_IDLE_LOW_SAMPLE_FIRST_EDGE, spi_bit_ordering_t bit_order = SPI_BIT_ORDERING_MSB_FIRST);
 
     /** Set the SPI bus clock frequency.
      *
      *  @param hz Clock frequency in Hz (default = 1MHz).
      */
-    void frequency(int hz = 1000000);
+    uint32_t frequency(uint32_t hz = 1000000);
 
     /** Write to the SPI Slave and return the response.
      *
@@ -157,7 +161,7 @@ public:
       */
     void set_default_write_value(char data);
 
-#if DEVICE_SPI_ASYNCH
+#if DEVICE_SPI_ASYNCH && 0
 
     /** Start non-blocking SPI transfer using 8bit buffers.
      *
@@ -273,7 +277,6 @@ private:
 
 
 #if TRANSACTION_QUEUE_SIZE_SPI
-
     /** Start a new transaction.
      *
      *  @param data Transaction data.
@@ -286,18 +289,42 @@ private:
 
     /* Queue of pending transfers */
     static CircularBuffer<Transaction<SPI>, TRANSACTION_QUEUE_SIZE_SPI> _transaction_buffer;
-#endif
-
-#endif //!defined(DOXYGEN_ONLY)
-
-#endif //DEVICE_SPI_ASYNCH
+#endif // TRANSACTION_QUEUE_SIZE_SPI
+#endif // !defined(DOXYGEN_ONLY)
+#endif // DEVICE_SPI_ASYNCH
 
 #if !defined(DOXYGEN_ONLY)
 protected:
-    /* Internal SPI object identifying the resources */
-    spi_t _spi;
+    struct spi_peripheral_s {
+        /* Internal SPI name identifying the resources. */
+        SPIName name;
+        /* Internal SPI object handling the resources' state. */
+        spi_t spi;
+        /* Used by lock and unlock for thread safety */
+        SingletonPtr<PlatformMutex> mutex;
+        /* Current user of the SPI */
+        SPI *owner = NULL;
 
-#if DEVICE_SPI_ASYNCH
+        /* Miso Pin used to assert consistency */
+        PinName miso;
+        /* Mosi Pin used to assert consistency */
+        PinName mosi;
+        /* Clock Pin used to assert consistency */
+        PinName sclk;
+        /* Slave Select Pin used to assert consistency */
+        PinName ssel;
+    };
+    /* Take over the physical SPI and apply our settings (thread safe) */
+    void acquire(void);
+
+    // holds spi_peripheral_s per peripheral on the device.
+    // Drawback: it costs ram size even if the device is not used.
+    static spi_peripheral_s _peripherals[SPI_COUNT];
+
+    // Holds the reference to the associated peripheral.
+    spi_peripheral_s *_peripheral;
+
+#if DEVICE_SPI_ASYNCH && 0
     /* Interrupt */
     CThunk<SPI> _irq;
     /* Interrupt handler callback */
@@ -306,34 +333,34 @@ protected:
     DMAUsage _usage;
     /* Current sate of the sleep manager */
     bool _deep_sleep_locked;
-#endif
+#endif // DEVICE_SPI_ASYNCH
 
-    /* Take over the physical SPI and apply our settings (thread safe) */
-    void aquire(void);
-    /* Current user of the SPI */
-    static SPI *_owner;
-    /* Used by lock and unlock for thread safety */
-    static SingletonPtr<PlatformMutex> _mutex;
+    // Configuration.
     /* Size of the SPI frame */
-    int _bits;
+    uint8_t _bits;
     /* Clock polairy and phase */
-    int _mode;
+    spi_mode_t _mode;
+    /* Bit ordering on the bus. */
+    spi_bit_ordering_t _bit_order;
     /* Clock frequency */
-    int _hz;
+    uint32_t _hz;
     /* Default character used for NULL transfers */
-    char _write_fill;
+    uint32_t _write_fill;
 
 private:
     /** Private acquire function without locking/unlocking.
      *  Implemented in order to avoid duplicate locking and boost performance.
      */
-    void _acquire(void);
+    uint32_t _acquire(void);
+    /** Private lookup in the static _peripherals table.
+     */
+    static spi_peripheral_s *_lookup(SPIName name, bool or_last = false);
 
 #endif //!defined(DOXYGEN_ONLY)
 };
 
 } // namespace mbed
 
-#endif
+#endif // DEVICE_SPI || DOXYGEN_ONLY
 
-#endif
+#endif // MBED_SPI_H
