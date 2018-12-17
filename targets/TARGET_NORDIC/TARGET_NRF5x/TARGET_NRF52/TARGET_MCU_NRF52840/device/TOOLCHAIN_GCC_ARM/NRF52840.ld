@@ -45,6 +45,12 @@
 #define MBED_RAM1_START (MBED_CRASH_REPORT_RAM_START + MBED_CRASH_REPORT_RAM_SIZE)
 #define MBED_RAM1_SIZE  (MBED_RAM_SIZE - (MBED_RAM0_SIZE + MBED_CRASH_REPORT_RAM_SIZE))
 
+#if !defined(MBED_BOOT_STACK_SIZE)
+    #define MBED_BOOT_STACK_SIZE 0x800
+#endif
+
+STACK_SIZE = MBED_BOOT_STACK_SIZE;
+
 MEMORY
 {
   FLASH (rx)     : ORIGIN = MBED_APP_START, LENGTH = MBED_APP_SIZE
@@ -263,12 +269,12 @@ SECTIONS
     {
         __StackLimit = .;
         *(.stack*)
-        . += (ORIGIN(RAM) + LENGTH(RAM) - .);
+        . = ORIGIN(RAM) + LENGTH(RAM) - STACK_SIZE;
     } > RAM
 
     /* Set the stack top to the end of RAM and move down the stack limit by
      * the size of the stack_dummy section. */
     __StackTop = ORIGIN(RAM) + LENGTH(RAM);
-    __StackLimit = __StackTop - SIZEOF(.stack);
+    __StackLimit = __StackTop - STACK_SIZE;
     PROVIDE(__stack = __StackTop);
 }
