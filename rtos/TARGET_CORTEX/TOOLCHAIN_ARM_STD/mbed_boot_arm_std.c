@@ -31,7 +31,11 @@ void _platform_post_stackheap_init(void);
 /* Defined by linker script */
 extern uint32_t Image$$RW_IRAM1$$ZI$$Limit[];
 #define HEAP_START      ((unsigned char*)Image$$RW_IRAM1$$ZI$$Limit)
+#ifdef ISR_STACK_START
+#define HEAP_SIZE       ((uint32_t)((uint32_t)ISR_STACK_START - (uint32_t)HEAP_START))
+#else
 #define HEAP_SIZE       ((uint32_t)((uint32_t)INITIAL_SP - (uint32_t)HEAP_START))
+#endif
 #endif
 
 /*

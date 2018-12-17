@@ -33,7 +33,11 @@ static osMutexAttr_t             env_mutex_attr;
 /* Defined by linker script */
 extern uint32_t __end__[];
 #define HEAP_START      ((unsigned char*)__end__)
+#ifdef ISR_STACK_START
+#define HEAP_SIZE       ((uint32_t)((uint32_t)ISR_STACK_START - (uint32_t)HEAP_START))
+#else
 #define HEAP_SIZE       ((uint32_t)((uint32_t)INITIAL_SP - (uint32_t)HEAP_START))
+#endif
 #endif
 
 extern void __libc_init_array(void);
