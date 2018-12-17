@@ -27,12 +27,10 @@
 __value_in_regs struct __argc_argv __rt_lib_init(unsigned heapbase, unsigned heaptop);
 void _platform_post_stackheap_init(void);
 
-#if !defined(HEAP_START)
 /* Defined by linker script */
 extern uint32_t Image$$RW_IRAM1$$ZI$$Limit[];
-#define HEAP_START      ((unsigned char*)Image$$RW_IRAM1$$ZI$$Limit)
-#define HEAP_SIZE       ((uint32_t)((uint32_t)INITIAL_SP - (uint32_t)HEAP_START))
-#endif
+extern uint32_t Image$$ARM_LIB_STACK$$ZI$$Base[];
+extern uint32_t Image$$ARM_LIB_STACK$$ZI$$Length[];
 
 /*
  * Note - Overriding the function __cpp_initialize__aeabi_ for the Arm
@@ -51,23 +49,12 @@ extern uint32_t Image$$RW_IRAM1$$ZI$$Limit[];
  */
 void __rt_entry(void)
 {
-    unsigned char *free_start = HEAP_START;
-    uint32_t free_size = HEAP_SIZE;
+    mbed_heap_start = ((unsigned char*)Image$$RW_IRAM1$$ZI$$Limit);
+    mbed_heap_size = (((uint32_t)Image$$ARM_LIB_STACK$$ZI$$Base) - (uint32_t)mbed_heap_start);
 
-#ifdef ISR_STACK_START
-    /* Interrupt stack explicitly specified */
-    mbed_stack_isr_size = ISR_STACK_SIZE;
-    mbed_stack_isr_start = ISR_STACK_START;
-#else
-    /* Interrupt stack -  reserve space at the end of the free block */
-    mbed_stack_isr_size = ISR_STACK_SIZE < free_size ? ISR_STACK_SIZE : free_size;
-    mbed_stack_isr_start = free_start + free_size - mbed_stack_isr_size;
-    free_size -= mbed_stack_isr_size;
-#endif
+    mbed_stack_isr_start = ((unsigned char*)Image$$ARM_LIB_STACK$$ZI$$Base);   
+    mbed_stack_isr_size = ((uint32_t)Image$$ARM_LIB_STACK$$ZI$$Length);
 
-    /* Heap - everything else */
-    mbed_heap_size = free_size;
-    mbed_heap_start = free_start;
     mbed_init();
 
     _platform_post_stackheap_init();

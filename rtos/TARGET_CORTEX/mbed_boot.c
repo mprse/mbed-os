@@ -49,25 +49,13 @@
  * -There is no custom layout available for IAR - everything must be defined in
  *      the .icf file and use the default layout
  *
- *
- * GCC Default Memory layout notes:
+ * GCC Memory layout:
  * -Block of memory from symbol __end__ to define INITIAL_SP used to setup interrupt
  *      stack and heap in the function set_stack_heap()
- * -ISR_STACK_SIZE can be overridden to be larger or smaller
  *
- * GCC Custom Memory layout notes:
- * -Heap can be explicitly placed by defining both HEAP_START and HEAP_SIZE
- * -Interrupt stack can be explicitly placed by defining both ISR_STACK_START and ISR_STACK_SIZE
- *
- *
- * ARM Memory layout
+ * ARM Memory layout:
  * -Block of memory from end of region "RW_IRAM1" to define INITIAL_SP used to setup interrupt
  *      stack and heap in the function set_stack_heap()
- * -ISR_STACK_SIZE can be overridden to be larger or smaller
- *
- * ARM Custom Memory layout notes:
- * -Heap can be explicitly placed by defining both HEAP_START and HEAP_SIZE
- * -Interrupt stack can be explicitly placed by defining both ISR_STACK_START and ISR_STACK_SIZE
  *
  */
 
