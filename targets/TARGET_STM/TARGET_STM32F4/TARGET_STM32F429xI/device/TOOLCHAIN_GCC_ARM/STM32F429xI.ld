@@ -2,7 +2,11 @@ M_VECTOR_RAM_SIZE = 0x400;
 
 /* With the RTOS in use, this does not affect the main stack size. The size of
  * the stack where main runs is determined via the RTOS. */
-STACK_SIZE = 0x400;
+#if !defined(MBED_BOOT_STACK_SIZE)
+    #define MBED_BOOT_STACK_SIZE 0x400
+#endif
+
+STACK_SIZE = MBED_BOOT_STACK_SIZE;
 
 HEAP_SIZE = 0x6000;
 
