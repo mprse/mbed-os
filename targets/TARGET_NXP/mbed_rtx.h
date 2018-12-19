@@ -97,30 +97,6 @@
 
 #elif defined(TARGET_MIMXRT1050_EVK)
 
-#if defined(__CC_ARM) || (defined(__ARMCC_VERSION) && (__ARMCC_VERSION >= 6010050))
-    extern uint32_t               Image$$RW_IRAM1$$ZI$$Base[];
-    extern uint32_t               Image$$RW_IRAM1$$ZI$$Length[];
-    extern uint32_t               Image$$ARM_LIB_STACK$$ZI$$Base[];
-    extern uint32_t               Image$$ARM_LIB_STACK$$ZI$$Length[];
-    #define HEAP_START            ((unsigned char*) Image$$RW_IRAM1$$ZI$$Base)
-    #define HEAP_SIZE             ((uint32_t) Image$$RW_IRAM1$$ZI$$Length)
-    #define ISR_STACK_START       ((unsigned char*)Image$$ARM_LIB_STACK$$ZI$$Base)
-    #define ISR_STACK_SIZE        ((uint32_t)Image$$ARM_LIB_STACK$$ZI$$Length)
-#elif defined(__GNUC__)
-    extern uint32_t               __StackTop[];
-    extern uint32_t               __StackLimit[];
-    extern uint32_t               __end__;
-    extern uint32_t               __HeapLimit[];
-    #define HEAP_START            ((unsigned char*)&__end__)
-    #define HEAP_SIZE             ((uint32_t)((uint32_t)__HeapLimit - (uint32_t)HEAP_START))
-    #define ISR_STACK_START       ((unsigned char*)__StackLimit)
-    #define ISR_STACK_SIZE        ((uint32_t)((uint32_t)__StackTop - (uint32_t)__StackLimit))
-#elif defined(__ICCARM__)
-    /* No region declarations needed */
-#else
-    #error "no toolchain defined"
-#endif
-
 #endif
 
 #endif  // MBED_MBED_RTX_H
