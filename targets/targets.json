@@ -1761,6 +1761,9 @@
             "PWMOUT",
             "SERIAL",
             "SLEEP",
+            "SPI",
+            "SPISLAVE",
+            "SPI_ASYNCH",
             "STDIO_MESSAGES"
         ]
     },
@@ -2560,10 +2563,7 @@
             "SERIAL_FC",
             "TRNG",
             "FLASH",
-            "MPU",
-            "SPI",
-            "SPISLAVE",
-            "SPI_ASYNCH"
+            "MPU"
         ],
         "detect_code": ["0796"],
         "release_versions": ["2", "5"],

@@ -41,6 +41,8 @@
 extern "C" {
 #endif
 
+#define SPI_COUNT 6
+
 struct pwmout_s {
     PWMName pwm;
     PinName pin;
