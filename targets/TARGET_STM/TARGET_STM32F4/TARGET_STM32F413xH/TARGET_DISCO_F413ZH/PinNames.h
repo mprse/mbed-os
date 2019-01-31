@@ -311,6 +311,17 @@ typedef enum {
     QSPI_FLASH1_SCK = PB_2,
     QSPI_FLASH1_CSN = PG_6,
 
+    SPI_3_MOSI    = PB_5,
+    SPI_3_MISO    = PB_4,
+    SPI_3_SCK     = PB_12,
+    SPI_3_CS      = PA_15,
+    /*
+    SPI_3_MOSI    = PB_5,
+    SPI_3_MISO    = PB_4,
+    SPI_3_SCK     = PB_12,
+    SPI_3_CS      = PA_15,
+    */
+
     /**** WIFI ISM43362 pins ****/
     ISM43362_WIFI_MISO      = PB_4,
     ISM43362_WIFI_MOSI      = PB_5,
