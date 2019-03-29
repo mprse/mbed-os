@@ -1877,8 +1877,7 @@
             }
         },
         "overrides": {
-            "deep-sleep-latency": 3,
-            "tickless-from-us-ticker": true
+            "deep-sleep-latency": 3
         },
         "device_has": [
             "USTICKER",
