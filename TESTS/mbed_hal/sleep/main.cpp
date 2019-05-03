@@ -124,6 +124,14 @@ void deepsleep_lpticker_test()
 
         sleep();
 
+        /* On some targets like STM family boards with LPTIM enabled an interrupt is triggered on counter rollover.
+           We need special handling for cases when next_match_timestamp < start_timestamp (interrupt is to be fired after rollover).
+           In such case after first wake-up we need to reset interrupt and go back to sleep waiting for the valid one. */
+        if ((next_match_timestamp < start_timestamp) && lp_ticker_read() < next_match_timestamp) {
+            lp_ticker_set_interrupt(next_match_timestamp);
+            sleep();
+        }
+
         const timestamp_t wakeup_timestamp = lp_ticker_read();
 
         sprintf(info, "Delta ticks: %u, Ticker width: %u, Expected wake up tick: %d, Actual wake up tick: %d, delay ticks: %d, wake up after ticks: %d",
