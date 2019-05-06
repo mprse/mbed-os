@@ -37,6 +37,9 @@
 
 #include "lp_ticker_api.h"
 #include "mbed_error.h"
+#include "mbed_power_mgmt.h"
+#include "platform/mbed_critical.h"
+#include <stdbool.h>
 
 #if !defined(LPTICKER_DELAY_TICKS) || (LPTICKER_DELAY_TICKS < 3)
 #warning "lpticker_delay_ticks value should be set to 3"
@@ -58,7 +61,11 @@ const ticker_info_t *lp_ticker_get_info()
 }
 
 volatile uint8_t  lp_Fired = 0;
-
+/*  Flag and stored counter to handle delayed programing at low level */
+volatile bool lp_delayed_prog = false;
+volatile bool lp_cmpok = false;
+volatile timestamp_t lp_delayed_counter = 0;
+volatile bool sleep_manager_locked = false;
 static int LPTICKER_inited = 0;
 
 static void LPTIM1_IRQHandler(void);
@@ -168,6 +175,7 @@ void lp_ticker_init(void)
 #endif
 
     __HAL_LPTIM_ENABLE_IT(&LptimHandle, LPTIM_IT_CMPM);
+    __HAL_LPTIM_ENABLE_IT(&LptimHandle, LPTIM_IT_CMPOK);
     HAL_LPTIM_Counter_Start(&LptimHandle, 0xFFFF);
 
     /* Need to write a compare value in order to get LPTIM_FLAG_CMPOK in set_interrupt */
@@ -175,10 +183,17 @@ void lp_ticker_init(void)
     __HAL_LPTIM_COMPARE_SET(&LptimHandle, 0);
     while (__HAL_LPTIM_GET_FLAG(&LptimHandle, LPTIM_FLAG_CMPOK) == RESET) {
     }
+    __HAL_LPTIM_CLEAR_FLAG(&LptimHandle, LPTIM_FLAG_CMPOK);
+
+    /* Init is called with Interrupts disabled, so the CMPOK interrupt
+     * will not be handler. Let's mark it is now safe to write to LP counter */
+    lp_cmpok = true;
 }
 
 static void LPTIM1_IRQHandler(void)
 {
+    core_util_critical_section_enter();
+
     LptimHandle.Instance = LPTIM1;
 
     if (lp_Fired) {
@@ -200,10 +215,27 @@ static void LPTIM1_IRQHandler(void)
         }
     }
 
+    if (__HAL_LPTIM_GET_FLAG(&LptimHandle, LPTIM_FLAG_CMPOK) != RESET) {
+        if (__HAL_LPTIM_GET_IT_SOURCE(&LptimHandle, LPTIM_IT_CMPOK) != RESET) {
+            __HAL_LPTIM_CLEAR_FLAG(&LptimHandle, LPTIM_FLAG_CMPOK);
+            lp_cmpok = true;
+            if(sleep_manager_locked) {
+                sleep_manager_unlock_deep_sleep();
+                sleep_manager_locked = false;
+            }
+            if(lp_delayed_prog) {
+                lp_ticker_set_interrupt(lp_delayed_counter);
+                lp_delayed_prog = false;
+            }
+        }
+    }
+
+
 #if defined (__HAL_LPTIM_WAKEUPTIMER_EXTI_CLEAR_FLAG)
     /* EXTI lines are not configured by default */
     __HAL_LPTIM_WAKEUPTIMER_EXTI_CLEAR_FLAG();
 #endif
+    core_util_critical_section_exit();
 }
 
 uint32_t lp_ticker_read(void)
@@ -217,49 +249,84 @@ uint32_t lp_ticker_read(void)
     return lp_time;
 }
 
+/*  This function hould always be called from critical section */
 void lp_ticker_set_interrupt(timestamp_t timestamp)
 {
     LptimHandle.Instance = LPTIM1;
     irq_handler = (void (*)(void))lp_ticker_irq_handler;
+    core_util_critical_section_enter();
 
-    /* CMPOK is set by hardware to inform application that the APB bus write operation to the LPTIM_CMP register has been successfully completed */
-    /* Any successive write before the CMPOK flag be set, will lead to unpredictable results */
-    /* LPTICKER_DELAY_TICKS value prevents OS to call this set interrupt function before CMPOK */
-    MBED_ASSERT(__HAL_LPTIM_GET_FLAG(&LptimHandle, LPTIM_FLAG_CMPOK) == SET);
+    /* Always store the last requested timestamp */
+    lp_delayed_counter = timestamp;
 
-    if(timestamp < lp_ticker_read()) {
-        /*  Workaround, because limitation */
-        __HAL_LPTIM_CLEAR_FLAG(&LptimHandle, LPTIM_FLAG_CMPOK);
-        __HAL_LPTIM_COMPARE_SET(&LptimHandle, ~0);
+    /* CMPOK is set by hardware to inform application that the APB bus write operation to the
+     * LPTIM_CMP register has been successfully completed
+     * Any successive write before the CMPOK flag be set, will lead to unpredictable results
+     * LPTICKER_DELAY_TICKS value prevents OS to call this set interrupt function before CMPOK */
+    if (lp_cmpok == false) {
+        /* if this is not safe to write, then delay the programing to the
+         * time when CMPOK interrupt will trigger */
+        if(!lp_delayed_prog) {
+            lp_delayed_prog = true;
+        }
     } else {
-        __HAL_LPTIM_CLEAR_FLAG(&LptimHandle, LPTIM_FLAG_CMPOK);
-        __HAL_LPTIM_COMPARE_SET(&LptimHandle, timestamp);
+        if(timestamp < lp_ticker_read() && (lp_delayed_prog == false)) {
+            /*  Workaround, because limitation */
+            __HAL_LPTIM_COMPARE_SET(&LptimHandle, ~0);
+        } else {
+            /*  It is safe to write */
+            __HAL_LPTIM_COMPARE_SET(&LptimHandle, timestamp);
+        }
+        /*  Prevent from sleeping after compare register was set as we need CMPOK
+         *  interrupt to fire (in ~3x30us cycles) before we can safely enter deep sleep mode */
+        if(!sleep_manager_locked) {
+            sleep_manager_lock_deep_sleep();
+            sleep_manager_locked = true;
+        }
+        lp_cmpok = false;
+        lp_ticker_clear_interrupt();
     }
-
-    lp_ticker_clear_interrupt();
-
     NVIC_EnableIRQ(LPTIM1_IRQn);
+    core_util_critical_section_exit();
 }
 
 void lp_ticker_fire_interrupt(void)
 {
+    core_util_critical_section_enter();
     lp_Fired = 1;
     irq_handler = (void (*)(void))lp_ticker_irq_handler;
     NVIC_SetPendingIRQ(LPTIM1_IRQn);
     NVIC_EnableIRQ(LPTIM1_IRQn);
+    core_util_critical_section_exit();
 }
 
 void lp_ticker_disable_interrupt(void)
 {
+    core_util_critical_section_enter();
+    // restore deep sleep if it was pending
+    if(!lp_cmpok) {
+        while (__HAL_LPTIM_GET_FLAG(&LptimHandle, LPTIM_FLAG_CMPOK) == RESET) {
+        }
+        __HAL_LPTIM_CLEAR_FLAG(&LptimHandle, LPTIM_FLAG_CMPOK);
+        lp_cmpok = true;
+        /*  now that CMPOK is set, allow deep sleep again */
+        if(sleep_manager_locked) {
+            sleep_manager_unlock_deep_sleep();
+            sleep_manager_locked = false;
+        }
+    }
     NVIC_DisableIRQ(LPTIM1_IRQn);
     LptimHandle.Instance = LPTIM1;
+    core_util_critical_section_exit();
 }
 
 void lp_ticker_clear_interrupt(void)
 {
+    core_util_critical_section_enter();
     LptimHandle.Instance = LPTIM1;
     __HAL_LPTIM_CLEAR_FLAG(&LptimHandle, LPTIM_FLAG_CMPM);
     NVIC_ClearPendingIRQ(LPTIM1_IRQn);
+    core_util_critical_section_exit();
 }
 
 void lp_ticker_free(void)
