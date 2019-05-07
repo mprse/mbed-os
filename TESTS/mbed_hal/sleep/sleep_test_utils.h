@@ -100,6 +100,21 @@ void busy_wait_ms(int ms)
     }
 }
 
+void busy_wait_100us(int n)
+{
+    const ticker_info_t *info = us_ticker_get_info();
+    uint32_t mask = (1 << info->bits) - 1;
+    int delay = (int)((uint64_t) n * info->frequency / 10000);
+
+    uint32_t prev = us_ticker_read();
+    while (delay > 0) {
+        uint32_t next = us_ticker_read();
+        delay -= (next - prev) & mask;
+        prev = next;
+    }
+}
+
+
 void us_ticker_isr(const ticker_data_t *const ticker_data)
 {
     us_ticker_clear_interrupt();
