@@ -45,6 +45,8 @@
 #warning "lpticker_delay_ticks value should be set to 3"
 #endif
 
+#define LPTIM_GPIO_DEBUG 1
+
 LPTIM_HandleTypeDef LptimHandle;
 
 const ticker_info_t *lp_ticker_get_info()
@@ -63,6 +65,7 @@ const ticker_info_t *lp_ticker_get_info()
 volatile uint8_t  lp_Fired = 0;
 /*  Flag and stored counter to handle delayed programing at low level */
 volatile bool lp_delayed_prog = false;
+
 volatile bool lp_cmpok = false;
 volatile timestamp_t lp_delayed_counter = 0;
 volatile bool sleep_manager_locked = false;
@@ -73,6 +76,23 @@ static void (*irq_handler)(void);
 
 void lp_ticker_init(void)
 {
+#ifdef LPTIM_GPIO_DEBUG
+    GPIO_InitTypeDef GPIO_InitStructure;
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+     __HAL_RCC_GPIOB_CLK_ENABLE();
+     /* Configure PA_0 PA_1 PA_4 PB_0 */
+     GPIO_InitStructure.Speed = GPIO_SPEED_HIGH;
+     GPIO_InitStructure.Mode = GPIO_MODE_OUTPUT_PP;
+     GPIO_InitStructure.Pull = GPIO_NOPULL;
+     GPIO_InitStructure.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_4 | GPIO_PIN_5;
+     HAL_GPIO_Init(GPIOA, &GPIO_InitStructure);
+     GPIO_InitStructure.Speed = GPIO_SPEED_HIGH;
+     GPIO_InitStructure.Mode = GPIO_MODE_OUTPUT_PP;
+     GPIO_InitStructure.Pull = GPIO_NOPULL;
+     GPIO_InitStructure.Pin = GPIO_PIN_0;
+     HAL_GPIO_Init(GPIOB, &GPIO_InitStructure);
+#endif
+
     /* Check if LPTIM is already configured */
     if (LPTICKER_inited) {
         lp_ticker_disable_interrupt();
@@ -188,11 +208,13 @@ void lp_ticker_init(void)
     /* Init is called with Interrupts disabled, so the CMPOK interrupt
      * will not be handler. Let's mark it is now safe to write to LP counter */
     lp_cmpok = true;
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, 1);
 }
 
 static void LPTIM1_IRQHandler(void)
 {
     core_util_critical_section_enter();
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, 1);
 
     LptimHandle.Instance = LPTIM1;
 
@@ -208,7 +230,6 @@ static void LPTIM1_IRQHandler(void)
         if (__HAL_LPTIM_GET_IT_SOURCE(&LptimHandle, LPTIM_IT_CMPM) != RESET) {
             /* Clear Compare match flag */
             __HAL_LPTIM_CLEAR_FLAG(&LptimHandle, LPTIM_FLAG_CMPM);
-
             if (irq_handler) {
                 irq_handler();
             }
@@ -219,6 +240,7 @@ static void LPTIM1_IRQHandler(void)
         if (__HAL_LPTIM_GET_IT_SOURCE(&LptimHandle, LPTIM_IT_CMPOK) != RESET) {
             __HAL_LPTIM_CLEAR_FLAG(&LptimHandle, LPTIM_FLAG_CMPOK);
             lp_cmpok = true;
+            HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, 1);
             if(sleep_manager_locked) {
                 sleep_manager_unlock_deep_sleep();
                 sleep_manager_locked = false;
@@ -235,6 +257,7 @@ static void LPTIM1_IRQHandler(void)
     /* EXTI lines are not configured by default */
     __HAL_LPTIM_WAKEUPTIMER_EXTI_CLEAR_FLAG();
 #endif
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, 0);
     core_util_critical_section_exit();
 }
 
@@ -255,6 +278,7 @@ void lp_ticker_set_interrupt(timestamp_t timestamp)
     LptimHandle.Instance = LPTIM1;
     irq_handler = (void (*)(void))lp_ticker_irq_handler;
     core_util_critical_section_enter();
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, 1);
 
     /* Always store the last requested timestamp */
     lp_delayed_counter = timestamp;
@@ -283,10 +307,12 @@ void lp_ticker_set_interrupt(timestamp_t timestamp)
             sleep_manager_lock_deep_sleep();
             sleep_manager_locked = true;
         }
+        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, 0);
         lp_cmpok = false;
         lp_ticker_clear_interrupt();
     }
     NVIC_EnableIRQ(LPTIM1_IRQn);
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, 0);
     core_util_critical_section_exit();
 }
 
