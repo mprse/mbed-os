@@ -30,9 +30,13 @@ const us_timestamp_t TEST_DELAY_US = 1000000.0F * TEST_DELAY_S;
 #define LONG_DELTA_US (100000)
 #define SHORT_DELTA_US (2000)
 
+Timer timer;
+
 void sem_callback(Semaphore *sem)
 {
+
     sem->release();
+
 }
 
 void cnt_callback(volatile uint32_t *cnt)
@@ -252,14 +256,42 @@ void test_delay_accuracy(void)
  * Then the callback is called
  *     and elapsed time matches given delay
  */
+/*
+extern uint32_t _lp_reads[100];
+extern uint32_t _us_reads[100];
+extern uint32_t _lp_reads_cnt;
+*/
+
+extern volatile uint32_t int_us_ticke_val[3000];
+extern volatile uint32_t int_lp_ticke_val[3000];
+extern volatile uint32_t int_cnt;
+extern volatile uint32_t set_int_val[3000];
+extern volatile uint32_t us_ticke_val[3000];
+extern volatile uint32_t lp_ticke_val[3000];
+extern volatile uint32_t set_int_cnt;
+extern volatile uint32_t delay_int_lp_ticke_val[3000];
+extern volatile bool set_int_go;
+extern volatile bool int_go;
+
 template<typename T, us_timestamp_t delay_us, us_timestamp_t delta_us>
 void test_sleep(void)
 {
+for (int i = 0; i<10; i++){
     Semaphore sem(0, 1);
     T timeout;
-    Timer timer;
 
+    uint32_t __lp_reads_cnt;
+
+    //_lp_reads_cnt = 0;
+    int_cnt = 0;
+    set_int_cnt = 0;
+    set_int_go = true;
+    int_go = true;
+
+    uint32_t us_read_1 = us_ticker_read();
+//printf("start\r\n");
     sleep_manager_lock_deep_sleep();
+    timer.reset();
     timer.start();
     timeout.attach_callback(mbed::callback(sem_callback, &sem), delay_us);
 
@@ -268,12 +300,46 @@ void test_sleep(void)
     while (sem.wait(0) != 1) {
         sleep();
     }
+
     timer.stop();
 
+    uint32_t us_read_2 = us_ticker_read();
+
     sleep_manager_unlock_deep_sleep();
-    TEST_ASSERT_UINT64_WITHIN(delta_us, delay_us, timer.read_high_resolution_us());
 
     timeout.detach();
+
+    set_int_go = false;
+    int_go = false;
+
+//printf("stop\r\n");
+    //__lp_reads_cnt = _lp_reads_cnt;
+
+    printf("start: %u, stop: %u: diff: %u \r\n", us_read_1, us_read_2, us_read_2-us_read_1);
+/*
+    printf("reads: %u \r\n", __lp_reads_cnt);
+    if (timer.read_high_resolution_us() > (delay_us + delta_us)) {
+        for (int i = 0; i < __lp_reads_cnt; i++) {
+            printf("Read[%i]: %8u %8u\r\n", i, _lp_reads[i], _us_reads[i]);
+
+        }
+    }
+*/
+
+    printf("set int cnt: %u \r\n", set_int_cnt);
+    printf("int cnt: %u \r\n", int_cnt);
+    if (timer.read_high_resolution_us() > (1100000)) {
+        for (int i = (set_int_cnt-5); i < set_int_cnt; i++) {
+            printf("SET INTERRUPT [%8u] us tick: %8u lp tick: %8u delay: %8u\r\n", set_int_val[i], us_ticke_val[i], lp_ticke_val[i], delay_int_lp_ticke_val[i]);
+        }
+
+        for (int i = (int_cnt-5); i < int_cnt; i++) {
+            printf("INTERRUPT us tick: %8u lp tick: %8u\r\n", int_us_ticke_val[i], int_lp_ticke_val[i]);
+        }
+    }
+
+    TEST_ASSERT_UINT64_WITHIN(delta_us, delay_us, timer.read_high_resolution_us());
+}
 }
 
 #if DEVICE_LPTICKER

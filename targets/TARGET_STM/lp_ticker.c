@@ -211,12 +211,22 @@ void lp_ticker_init(void)
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, 1);
 }
 
+#define B_SIZE 3000
+volatile uint32_t int_us_ticke_val[B_SIZE];
+volatile uint32_t int_lp_ticke_val[B_SIZE];
+
+volatile uint32_t int_cnt;
+volatile bool int_go = true;
+
 static void LPTIM1_IRQHandler(void)
 {
     core_util_critical_section_enter();
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, 1);
 
     LptimHandle.Instance = LPTIM1;
+
+    if (int_cnt<B_SIZE) int_us_ticke_val[int_cnt] = us_ticker_read();
+    if (int_cnt<B_SIZE) int_lp_ticke_val[int_cnt] = lp_ticker_read();
 
     if (lp_Fired) {
         lp_Fired = 0;
@@ -248,10 +258,12 @@ static void LPTIM1_IRQHandler(void)
             if(lp_delayed_prog) {
                 lp_ticker_set_interrupt(lp_delayed_counter);
                 lp_delayed_prog = false;
+
             }
         }
     }
 
+    if(int_go) int_cnt++;
 
 #if defined (__HAL_LPTIM_WAKEUPTIMER_EXTI_CLEAR_FLAG)
     /* EXTI lines are not configured by default */
@@ -261,6 +273,12 @@ static void LPTIM1_IRQHandler(void)
     core_util_critical_section_exit();
 }
 
+/*
+volatile uint32_t _lp_reads[10000];
+volatile uint32_t _us_reads[10000];
+volatile uint32_t _lp_reads_cnt;
+*/
+
 uint32_t lp_ticker_read(void)
 {
     uint32_t lp_time = LPTIM1->CNT;
@@ -269,8 +287,20 @@ uint32_t lp_ticker_read(void)
     while (lp_time != LPTIM1->CNT) {
         lp_time = LPTIM1->CNT;
     }
+/*
+    if (_lp_reads_cnt < 10000) _lp_reads[_lp_reads_cnt] = lp_time;
+    if (_lp_reads_cnt < 10000) _us_reads[_lp_reads_cnt] = us_ticker_read();
+    _lp_reads_cnt++;
+*/
     return lp_time;
 }
+
+volatile uint32_t set_int_val[B_SIZE];
+volatile uint32_t us_ticke_val[B_SIZE];
+volatile uint32_t lp_ticke_val[B_SIZE];
+volatile uint32_t set_int_cnt;
+volatile uint32_t delay_int_lp_ticke_val[B_SIZE];
+volatile bool set_int_go = true;
 
 /*  This function hould always be called from critical section */
 void lp_ticker_set_interrupt(timestamp_t timestamp)
@@ -279,6 +309,8 @@ void lp_ticker_set_interrupt(timestamp_t timestamp)
     irq_handler = (void (*)(void))lp_ticker_irq_handler;
     core_util_critical_section_enter();
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, 1);
+
+    if (set_int_cnt<B_SIZE) set_int_val[set_int_cnt] = timestamp;
 
     /* Always store the last requested timestamp */
     lp_delayed_counter = timestamp;
@@ -292,6 +324,7 @@ void lp_ticker_set_interrupt(timestamp_t timestamp)
          * time when CMPOK interrupt will trigger */
         if(!lp_delayed_prog) {
             lp_delayed_prog = true;
+            delay_int_lp_ticke_val[set_int_cnt] = lp_delayed_counter;
         }
     } else {
         if(timestamp < lp_ticker_read() && (lp_delayed_prog == false)) {
@@ -300,6 +333,9 @@ void lp_ticker_set_interrupt(timestamp_t timestamp)
         } else {
             /*  It is safe to write */
             __HAL_LPTIM_COMPARE_SET(&LptimHandle, timestamp);
+            if (set_int_cnt<B_SIZE) us_ticke_val[set_int_cnt] = us_ticker_read();
+            if (set_int_cnt<B_SIZE) lp_ticke_val[set_int_cnt] = lp_ticker_read();
+            if (set_int_cnt<B_SIZE) delay_int_lp_ticke_val[set_int_cnt] = 0;
         }
         /*  Prevent from sleeping after compare register was set as we need CMPOK
          *  interrupt to fire (in ~3x30us cycles) before we can safely enter deep sleep mode */
@@ -314,6 +350,8 @@ void lp_ticker_set_interrupt(timestamp_t timestamp)
     NVIC_EnableIRQ(LPTIM1_IRQn);
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, 0);
     core_util_critical_section_exit();
+
+    if (set_int_go) set_int_cnt++;
 }
 
 void lp_ticker_fire_interrupt(void)

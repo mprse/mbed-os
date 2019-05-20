@@ -29,10 +29,11 @@ using namespace utest::v1;
 utest::v1::status_t greentea_failure_handler(const Case *const source, const failure_t reason)
 {
     greentea_case_failure_abort_handler(source, reason);
-    return STATUS_CONTINUE;
+    return STATUS_ABORT;
 }
 
 Case cases[] = {
+#if 0
     Case("Callback called once (attach)", test_single_call<AttachTester<LowPowerTimeout> >),
     Case("Callback called once (attach_us)", test_single_call<AttachUSTester<LowPowerTimeout> >),
 
@@ -62,10 +63,11 @@ Case cases[] = {
          greentea_failure_handler),
     Case("5 s delay accuracy (attach_us)", test_delay_accuracy<AttachUSTester<LowPowerTimeout>, 5000000, LONG_DELTA_US>,
          greentea_failure_handler),
-
+#endif
 #if DEVICE_SLEEP
     Case("1 s delay during sleep (attach)", test_sleep<AttachTester<LowPowerTimeout>, 1000000, LONG_DELTA_US>,
          greentea_failure_handler),
+
     Case("1 s delay during sleep (attach_us)", test_sleep<AttachUSTester<LowPowerTimeout>, 1000000, LONG_DELTA_US>,
          greentea_failure_handler),
 
@@ -73,10 +75,12 @@ Case cases[] = {
          greentea_failure_handler),
     Case("1 s delay during deepsleep (attach_us)", test_deepsleep<AttachUSTester<LowPowerTimeout>, 1000000, LONG_DELTA_US>,
          greentea_failure_handler),
-#endif
 
+#endif
+#if 0
     Case("Timing drift (attach)", test_drift<AttachTester<LowPowerTimeout> >),
     Case("Timing drift (attach_us)", test_drift<AttachUSTester<LowPowerTimeout> >),
+#endif
 };
 
 utest::v1::status_t greentea_test_setup(const size_t number_of_cases)
