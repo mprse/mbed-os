@@ -36,6 +36,7 @@ using utest::v1::Harness;
 
 void test_lock_unlock()
 {
+    busy_wait_ms(1);
     TEST_ASSERT_TRUE(sleep_manager_can_deep_sleep());
 
     sleep_manager_lock_deep_sleep();
@@ -116,9 +117,14 @@ void test_sleep_auto()
     us_timestamp_t us_ts1, us_ts2, lp_ts1, lp_ts2, us_diff1, us_diff2, lp_diff1, lp_diff2;
 
     sleep_manager_lock_deep_sleep();
+    /*  Let's avoid the Lp ticker wrap-around case */
+    while(lp_ticker_read() != 0);
     uint32_t lp_wakeup_ts_raw = lp_ticker_read() + us_to_ticks(SLEEP_DURATION_US, lp_ticker_info->frequency);
     timestamp_t lp_wakeup_ts = overflow_protect(lp_wakeup_ts_raw, lp_ticker_info->bits);
     lp_ticker_set_interrupt(lp_wakeup_ts);
+    /* STM32 Targets will get an interrupt short time after LPTIM interrupt is
+     * programed so let it pass */
+    busy_wait_ms(1);
     us_ts1 = ticks_to_us(us_ticker_read(), us_ticker_info->frequency);
     lp_ts1 = ticks_to_us(lp_ticker_read(), lp_ticker_info->frequency);
 
@@ -144,13 +150,19 @@ void test_sleep_auto()
     // Wait for hardware serial buffers to flush.
     busy_wait_ms(SERIAL_FLUSH_TIME_MS);
 
+    /*  Let's avoid the Lp ticker wrap-around case */
+    while(lp_ticker_read() != 0);
     lp_wakeup_ts_raw = lp_ticker_read() + us_to_ticks(SLEEP_DURATION_US, lp_ticker_info->frequency);
     lp_wakeup_ts = overflow_protect(lp_wakeup_ts_raw, lp_ticker_info->bits);
     lp_ticker_set_interrupt(lp_wakeup_ts);
+    /* STM32 Targets will get an interrupt short time after LPTIM interrupt is
+     * programed so let it pass */
+    busy_wait_ms(1);
     us_ts1 = ticks_to_us(us_ticker_read(), us_ticker_info->frequency);
     lp_ts1 = ticks_to_us(lp_ticker_read(), lp_ticker_info->frequency);
 
     sleep_manager_sleep_auto();
+
     us_ts2 = ticks_to_us(us_ticker_read(), us_ticker_info->frequency);
     us_diff2 = (us_ts1 <= us_ts2) ? (us_ts2 - us_ts1) : (us_ticker_mask - us_ts1 + us_ts2 + 1);
     lp_ts2 = ticks_to_us(lp_ticker_read(), lp_ticker_info->frequency);
@@ -233,7 +245,11 @@ utest::v1::status_t testsuite_setup(const size_t number_of_cases)
 
 Case cases[] = {
     Case("deep sleep lock/unlock", test_lock_unlock),
-    Case("deep sleep locked USHRT_MAX times", test_lock_eq_ushrt_max),
+
+    Case("sleep_auto calls sleep/deep sleep based on lock",
+         (utest::v1::case_setup_handler_t) testcase_setup,
+         test_lock_eq_ushrt_max,
+         (utest::v1::case_teardown_handler_t) testcase_teardown),
 #if DEVICE_LPTICKER
 #if DEVICE_USTICKER
     Case("sleep_auto calls sleep/deep sleep based on lock",
