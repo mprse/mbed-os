@@ -375,7 +375,7 @@ void ticker_insert_event_us(const ticker_data_t *const ticker, ticker_event_t *o
     obj->next = p;
 
     /* if prev is NULL we're at the head */
-    if (prev == NULL) {
+    if (prev == NULL || timestamp <= ticker->queue->present_time) {
         ticker->queue->head = obj;
         schedule_interrupt(ticker);
     } else {
