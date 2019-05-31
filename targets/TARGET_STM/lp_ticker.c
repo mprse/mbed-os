@@ -259,11 +259,17 @@ uint32_t lp_ticker_read(void)
 }
 
 /*  This function should always be called from critical section */
+volatile uint32_t last_timestamp = 0xFFFFFFFF;
 void lp_ticker_set_interrupt(timestamp_t timestamp)
 {
     LptimHandle.Instance = LPTIM1;
     irq_handler = (void (*)(void))lp_ticker_irq_handler;
     core_util_critical_section_enter();
+
+    if (last_timestamp == timestamp) {
+        core_util_critical_section_exit();
+        return;
+    }
 
     /* Always store the last requested timestamp */
     lp_delayed_counter = timestamp;
@@ -293,9 +299,11 @@ void lp_ticker_set_interrupt(timestamp_t timestamp)
         if((timestamp < last_read_counter) && (last_read_counter <= (0xFFFF - LP_TIMER_SAFE_GUARD))) {
             /*  Workaround, because limitation */
             __HAL_LPTIM_COMPARE_SET(&LptimHandle, ~0);
+            last_timestamp = 0xFFFF;
         } else {
             /*  It is safe to write */
             __HAL_LPTIM_COMPARE_SET(&LptimHandle, timestamp);
+            last_timestamp = timestamp;
         }
 
         /* We just programed the CMP so we'll need to wait for cmpok before
