@@ -73,6 +73,7 @@ extern "C" {
 SPIName spi_get_peripheral_name(PinName mosi, PinName miso, PinName mclk);
 #endif
 
+#if !defined(EXPLICIT_PINMAP)
 /** Initialize the SPI peripheral
  *
  * Configures the pins used by SPI, sets a default format and frequency, and enables the peripheral
@@ -83,6 +84,20 @@ SPIName spi_get_peripheral_name(PinName mosi, PinName miso, PinName mclk);
  * @param[in]  ssel The pin to use for SSEL
  */
 void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel);
+#else
+/** Initialize the SPI peripheral
+ *
+ * Configures the pins used by SPI, sets a default format and frequency, and enables the peripheral
+ * @param[out] obj  The SPI object to initialize
+ * @param[in]  mosi The pin to use for MOSI
+ * @param[in]  miso The pin to use for MISO
+ * @param[in]  sclk The pin to use for SCLK
+ * @param[in]  ssel The pin to use for SSEL
+ * @param[in]  explicit_pinmap pointer to strucure which holds static pinmap
+ *
+ */
+void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel, explicit_pinmap_t *explicit_pinmap);
+#endif //EXPLICIT_PINMAP
 
 /** Release a SPI object
  *

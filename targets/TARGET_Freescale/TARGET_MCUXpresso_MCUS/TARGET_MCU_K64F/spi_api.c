@@ -33,6 +33,7 @@ static SPI_Type *const spi_address[] = SPI_BASE_PTRS;
 /* Array of SPI bus clock frequencies */
 static clock_name_t const spi_clocks[] = SPI_CLOCK_FREQS;
 
+#if !defined(EXPLICIT_PINMAP)
 SPIName spi_get_peripheral_name(PinName mosi, PinName miso, PinName sclk)
 {
     SPIName spi_mosi = (SPIName)pinmap_peripheral(mosi, PinMap_SPI_MOSI);
@@ -51,7 +52,9 @@ SPIName spi_get_peripheral_name(PinName mosi, PinName miso, PinName sclk)
 
     return spi_per;
 }
+#endif
 
+#if !defined(EXPLICIT_PINMAP)
 void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel)
 {
     // determine the SPI to use
@@ -78,6 +81,30 @@ void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel
 
     obj->spi.spiDmaMasterRx.dmaUsageState = DMA_USAGE_OPPORTUNISTIC;
 }
+#else
+void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel, explicit_pinmap_t *explicit_pinmap)
+{
+    obj->spi.instance = explicit_pinmap->peripheral;
+    MBED_ASSERT((int)obj->spi.instance != NC);
+
+    // pin out the spi pins
+    pin_function(mosi, explicit_pinmap->function[0]);
+    pin_mode(mosi, PullNone);
+    pin_function(miso, explicit_pinmap->function[1]);
+    pin_mode(miso, PullNone);
+    pin_function(sclk, explicit_pinmap->function[2]);
+    pin_mode(sclk, PullNone);
+    if (ssel != NC) {
+        pin_function(ssel, explicit_pinmap->function[3]);
+        pin_mode(ssel, PullNone);
+    }
+
+    /* Set the transfer status to idle */
+    obj->spi.status = kDSPI_Idle;
+
+    obj->spi.spiDmaMasterRx.dmaUsageState = DMA_USAGE_OPPORTUNISTIC;
+}
+#endif //EXPLICIT_PINMAP
 
 void spi_free(spi_t *obj)
 {
