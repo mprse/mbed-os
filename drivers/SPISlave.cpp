@@ -20,13 +20,17 @@
 
 namespace mbed {
 
-SPISlave::SPISlave(PinName mosi, PinName miso, PinName sclk, PinName ssel) :
+SPISlave::SPISlave(PinName mosi, PinName miso, PinName sclk, PinName ssel, explicit_pinmap_t *explicit_pinmap) :
     _spi(),
     _bits(8),
     _mode(0),
     _hz(1000000)
 {
+#if defined(EXPLICIT_PINMAP)
+    spi_init(&_spi, mosi, miso, sclk, ssel, explicit_pinmap);
+#else
     spi_init(&_spi, mosi, miso, sclk, ssel);
+#endif
     spi_format(&_spi, _bits, _mode, 1);
     spi_frequency(&_spi, _hz);
 }

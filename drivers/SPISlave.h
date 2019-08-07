@@ -65,8 +65,9 @@ public:
      *  @param miso SPI Master In, Slave Out pin.
      *  @param sclk SPI Clock pin.
      *  @param ssel SPI Chip Select pin.
+     *  @param explicit_pinmap pointer to strucure which holds static pinmap.
      */
-    SPISlave(PinName mosi, PinName miso, PinName sclk, PinName ssel);
+    SPISlave(PinName mosi, PinName miso, PinName sclk, PinName ssel, explicit_pinmap_t *explicit_pinmap = NULL);
 
     /** Configure the data transmission format.
      *
