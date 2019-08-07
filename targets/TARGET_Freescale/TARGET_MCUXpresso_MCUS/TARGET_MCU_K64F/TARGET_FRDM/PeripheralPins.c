@@ -264,6 +264,8 @@ const PinMap PinMap_UART_RTS[] = {
 };
 
 /************SPI***************/
+
+#if !defined(EXPLICIT_PINMAP)
 const PinMap PinMap_SPI_SCLK[] = {
     {PTD1 , SPI_0, 2},
     {PTE2 , SPI_1, 2},
@@ -309,6 +311,7 @@ const PinMap PinMap_SPI_SSEL[] = {
     {PTD4 , SPI_1, 7},
     {NC   , NC   , 0}
 };
+#endif
 
 /************PWM***************/
 const PinMap PinMap_PWM[] = {
