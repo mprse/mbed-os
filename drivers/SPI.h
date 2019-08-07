@@ -109,8 +109,9 @@ public:
      *  @param miso SPI Master In, Slave Out pin.
      *  @param sclk SPI Clock pin.
      *  @param ssel SPI Chip Select pin.
+     *  @param explicit_pinmap pointer to strucure which holds static pinmap.
      */
-    SPI(PinName mosi, PinName miso, PinName sclk, PinName ssel = NC);
+    SPI(PinName mosi, PinName miso, PinName sclk, PinName ssel = NC, explicit_pinmap_t *explicit_pinmap = NULL);
 
     /** Create a SPI master connected to the specified pins.
      *
@@ -125,8 +126,9 @@ public:
      *  @param miso SPI Master In, Slave Out pin.
      *  @param sclk SPI Clock pin.
      *  @param ssel SPI Chip Select pin.
+     *  @param explicit_pinmap pointer to strucure which holds static pinmap.
      */
-    SPI(PinName mosi, PinName miso, PinName sclk, PinName ssel, use_gpio_ssel_t);
+    SPI(PinName mosi, PinName miso, PinName sclk, PinName ssel, use_gpio_ssel_t, explicit_pinmap_t *explicit_pinmap = NULL);
 
     virtual ~SPI();
 
@@ -405,6 +407,10 @@ protected:
     char _write_fill;
     /* Select count to handle re-entrant selection */
     int8_t _select_count;
+
+#if defined(EXPLICIT_PINMAP)
+    explicit_pinmap_t *_explicit_pinmap;
+#endif
 
 private:
     void _do_construct();

@@ -28,7 +28,7 @@ namespace mbed {
 SPI::spi_peripheral_s SPI::_peripherals[SPI_PERIPHERALS_USED];
 int SPI::_peripherals_used;
 
-SPI::SPI(PinName mosi, PinName miso, PinName sclk, PinName ssel) :
+SPI::SPI(PinName mosi, PinName miso, PinName sclk, PinName ssel, explicit_pinmap_t *explicit_pinmap) :
 #if DEVICE_SPI_ASYNCH
     _irq(this),
 #endif
@@ -37,11 +37,14 @@ SPI::SPI(PinName mosi, PinName miso, PinName sclk, PinName ssel) :
     _sclk(sclk),
     _hw_ssel(ssel),
     _sw_ssel(NC)
+#if defined(EXPLICIT_PINMAP)
+    ,_explicit_pinmap(explicit_pinmap)
+#endif
 {
     _do_construct();
 }
 
-SPI::SPI(PinName mosi, PinName miso, PinName sclk, PinName ssel, use_gpio_ssel_t) :
+SPI::SPI(PinName mosi, PinName miso, PinName sclk, PinName ssel, use_gpio_ssel_t, explicit_pinmap_t *explicit_pinmap) :
 #if DEVICE_SPI_ASYNCH
     _irq(this),
 #endif
@@ -50,6 +53,9 @@ SPI::SPI(PinName mosi, PinName miso, PinName sclk, PinName ssel, use_gpio_ssel_t
     _sclk(sclk),
     _hw_ssel(NC),
     _sw_ssel(ssel, 1)
+#if defined(EXPLICIT_PINMAP)
+    ,_explicit_pinmap(explicit_pinmap)
+#endif
 {
     _do_construct();
 }
@@ -69,7 +75,11 @@ void SPI::_do_construct()
 
     // Need backwards compatibility with HALs not providing API
 #ifdef DEVICE_SPI_COUNT
+#if !defined(EXPLICIT_PINMAP)
     SPIName name = spi_get_peripheral_name(_mosi, _miso, _sclk);
+#else
+    SPIName name = (SPIName)_explicit_pinmap->peripheral;
+#endif
 #else
     SPIName name = GlobalSPI;
 #endif
@@ -158,7 +168,11 @@ void SPI::frequency(int hz)
 void SPI::_acquire()
 {
     if (_peripheral->owner != this) {
+#if defined(EXPLICIT_PINMAP)
+        spi_init(&_peripheral->spi, _mosi, _miso, _sclk, _hw_ssel, _explicit_pinmap);
+#else
         spi_init(&_peripheral->spi, _mosi, _miso, _sclk, _hw_ssel);
+#endif
         spi_format(&_peripheral->spi, _bits, _mode, 0);
         spi_frequency(&_peripheral->spi, _hz);
         _peripheral->owner = this;
