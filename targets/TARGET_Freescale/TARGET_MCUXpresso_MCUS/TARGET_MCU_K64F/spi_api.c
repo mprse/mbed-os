@@ -52,6 +52,29 @@ SPIName spi_get_peripheral_name(PinName mosi, PinName miso, PinName sclk)
     return spi_per;
 }
 
+void spi_init_direct(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel, explicit_pinmap_t *explicit_pinmap)
+{
+    obj->spi.instance = explicit_pinmap->peripheral;
+    MBED_ASSERT((int)obj->spi.instance != NC);
+
+    // pin out the spi pins
+    pin_function(mosi, explicit_pinmap->function[0]);
+    pin_mode(mosi, PullNone);
+    pin_function(miso, explicit_pinmap->function[1]);
+    pin_mode(miso, PullNone);
+    pin_function(sclk, explicit_pinmap->function[2]);
+    pin_mode(sclk, PullNone);
+    if (ssel != NC) {
+        pin_function(ssel, explicit_pinmap->function[3]);
+        pin_mode(ssel, PullNone);
+    }
+
+    /* Set the transfer status to idle */
+    obj->spi.status = kDSPI_Idle;
+
+    obj->spi.spiDmaMasterRx.dmaUsageState = DMA_USAGE_OPPORTUNISTIC;
+}
+
 void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel)
 {
     // determine the SPI to use
@@ -62,21 +85,20 @@ void spi_init(spi_t *obj, PinName mosi, PinName miso, PinName sclk, PinName ssel
     uint32_t spi_data = pinmap_merge(spi_mosi, spi_miso);
     uint32_t spi_cntl = pinmap_merge(spi_sclk, spi_ssel);
 
-    obj->spi.instance = pinmap_merge(spi_data, spi_cntl);
-    MBED_ASSERT((int)obj->spi.instance != NC);
+    int peripheral = (int)pinmap_merge(spi_data, spi_cntl);
 
     // pin out the spi pins
-    pinmap_pinout(mosi, PinMap_SPI_MOSI);
-    pinmap_pinout(miso, PinMap_SPI_MISO);
-    pinmap_pinout(sclk, PinMap_SPI_SCLK);
-    if (ssel != NC) {
-        pinmap_pinout(ssel, PinMap_SPI_SSEL);
-    }
+    int mosi_function = (int)pinmap_find_function(mosi, PinMap_SPI_MOSI);
+    int miso_function = (int)pinmap_find_function(miso, PinMap_SPI_MISO);
+    int sclk_function = (int)pinmap_find_function(sclk, PinMap_SPI_SCLK);
+    int ssel_function = (int)pinmap_find_function(ssel, PinMap_SPI_SSEL);
 
-    /* Set the transfer status to idle */
-    obj->spi.status = kDSPI_Idle;
+    int pins_function[4] = {mosi_function, miso_function, sclk_function, ssel_function};
+    explicit_pinmap_t explicit_spi_pinmap = {peripheral, pins_function};
 
-    obj->spi.spiDmaMasterRx.dmaUsageState = DMA_USAGE_OPPORTUNISTIC;
+    printf("peripheral: %d, functions: %d %d %d %d \r\n", explicit_spi_pinmap.peripheral, explicit_spi_pinmap.function[0], explicit_spi_pinmap.function[1],explicit_spi_pinmap.function[2],explicit_spi_pinmap.function[3]);
+
+    spi_init_direct(obj, mosi, miso, sclk, ssel, &explicit_spi_pinmap);
 }
 
 void spi_free(spi_t *obj)
