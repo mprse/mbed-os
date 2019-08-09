@@ -36,8 +36,17 @@ SPI::SPI(PinName mosi, PinName miso, PinName sclk, PinName ssel) :
     _miso(miso),
     _sclk(sclk),
     _hw_ssel(ssel),
-    _sw_ssel(NC)
+    _sw_ssel(NC),
+    _explicit_pinmap(NULL),
+    _init_func((void*)spi_init)
 {
+    // Need backwards compatibility with HALs not providing API
+#ifdef DEVICE_SPI_COUNT
+    _peripheral_name = spi_get_peripheral_name(_mosi, _miso, _sclk);
+#else
+    _peripheral_name = GlobalSPI;
+#endif
+
     _do_construct();
 }
 
@@ -49,7 +58,48 @@ SPI::SPI(PinName mosi, PinName miso, PinName sclk, PinName ssel, use_gpio_ssel_t
     _miso(miso),
     _sclk(sclk),
     _hw_ssel(NC),
-    _sw_ssel(ssel, 1)
+    _sw_ssel(ssel, 1),
+    _explicit_pinmap(NULL),
+    _init_func((void*)spi_init)
+{
+    // Need backwards compatibility with HALs not providing API
+#ifdef DEVICE_SPI_COUNT
+    _peripheral_name = spi_get_peripheral_name(_mosi, _miso, _sclk);
+#else
+    _peripheral_name = GlobalSPI;
+#endif
+    _do_construct();
+}
+
+SPI::SPI(const spi_pinmap_t &pinmap) :
+#if DEVICE_SPI_ASYNCH
+    _irq(this),
+#endif
+    _mosi(pinmap.mosi_pin),
+    _miso(pinmap.miso_pin),
+    _sclk(pinmap.sclk_pin),
+    _hw_ssel(pinmap.ssel_pin),
+    _sw_ssel(NC),
+    _explicit_pinmap(&pinmap),
+    _peripheral_name((SPIName)pinmap.peripheral),
+    _init_func((const void*)spi_init_direct)
+
+{
+    _do_construct();
+}
+
+SPI::SPI(const spi_pinmap_t &pinmap, PinName ssel) :
+#if DEVICE_SPI_ASYNCH
+    _irq(this),
+#endif
+    _mosi(pinmap.mosi_pin),
+    _miso(pinmap.miso_pin),
+    _sclk(pinmap.sclk_pin),
+    _hw_ssel(NC),
+    _sw_ssel(ssel, 1),
+    _explicit_pinmap(&pinmap),
+    _peripheral_name((SPIName)pinmap.peripheral),
+    _init_func((const void*)spi_init_direct)
 {
     _do_construct();
 }
@@ -67,20 +117,13 @@ void SPI::_do_construct()
     _hz = 1000000;
     _write_fill = SPI_FILL_CHAR;
 
-    // Need backwards compatibility with HALs not providing API
-#ifdef DEVICE_SPI_COUNT
-    SPIName name = spi_get_peripheral_name(_mosi, _miso, _sclk);
-#else
-    SPIName name = GlobalSPI;
-#endif
-
     core_util_critical_section_enter();
     // lookup in a critical section if we already have it else initialize it
 
-    _peripheral = SPI::_lookup(name);
+    _peripheral = SPI::_lookup(_peripheral_name);
     if (!_peripheral) {
         _peripheral = SPI::_alloc();
-        _peripheral->name = name;
+        _peripheral->name = _peripheral_name;
     }
     core_util_critical_section_exit();
 
@@ -158,7 +201,15 @@ void SPI::frequency(int hz)
 void SPI::_acquire()
 {
     if (_peripheral->owner != this) {
-        spi_init(&_peripheral->spi, _mosi, _miso, _sclk, _hw_ssel);
+        if (_explicit_pinmap) {
+            typedef void (*p_spi_init_t)(spi_t*, const spi_pinmap_t*);
+            p_spi_init_t p_spi_init = (p_spi_init_t)_init_func;
+            p_spi_init(&_peripheral->spi, _explicit_pinmap);
+        } else {
+            typedef void (*p_spi_init_t)(spi_t*, PinName, PinName, PinName, PinName);
+            p_spi_init_t p_spi_init = (p_spi_init_t)_init_func;
+            p_spi_init(&_peripheral->spi, _mosi, _miso, _sclk, _hw_ssel);
+        }
         spi_format(&_peripheral->spi, _bits, _mode, 0);
         spi_frequency(&_peripheral->spi, _hz);
         _peripheral->owner = this;
