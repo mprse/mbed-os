@@ -22,10 +22,10 @@ int main()
 {
     int pins_function[4] = {2, 2, 2, 2};
     PinName pins[4] = {PTD2, PTD3, PTD1, PTD0};
-    explicit_pinmap_t explicit_spi_pinmap = {SPI_0, pins, pins_function};
+    explicit_pinmap_t explicit_spi_pinmap = {SPI_0, pins_function};
 
     //SPI spi(PTD2, PTD3, PTD1, PTD0);
-    SPI spi(&explicit_spi_pinmap);
+    SPI spi(PTD2, PTD3, PTD1, PTD0, &explicit_spi_pinmap);
     spi.format(8, 0);
     spi.frequency(1000000);
 
