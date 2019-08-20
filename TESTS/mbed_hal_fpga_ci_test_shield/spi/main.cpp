@@ -37,7 +37,9 @@ using namespace utest::v1;
 typedef enum {
     TRANSFER_SPI_MASTER_WRITE_SYNC,
     TRANSFER_SPI_MASTER_BLOCK_WRITE_SYNC,
-    TRANSFER_SPI_MASTER_TRANSFER_ASYNC
+    TRANSFER_SPI_MASTER_TRANSFER_ASYNC,
+    TRANSFER_SPI_MASTER_SPI_CLASS,
+    TRANSFER_SPI_MASTER_SPI_CLASS_EXPLICIT_PINMAP,
 } transfer_type_t;
 
 #define FREQ_500_KHZ 500000
@@ -49,6 +51,7 @@ SPIMasterTester tester(DefaultFormFactor::pins(), DefaultFormFactor::restricted_
 
 spi_t spi;
 static volatile bool async_trasfer_done;
+SPI * p_spi;
 
 #if DEVICE_SPI_ASYNCH
 void spi_async_handler()
@@ -81,10 +84,21 @@ void spi_test_common(PinName mosi, PinName miso, PinName sclk, PinName ssel, SPI
     tester.pin_map_set(ssel, MbedTester::LogicalPinSPISsel);
 
     // Initialize mbed SPI pins
+    if (transfer_type == TRANSFER_SPI_MASTER_WRITE_SYNC || transfer_type == TRANSFER_SPI_MASTER_BLOCK_WRITE_SYNC || transfer_type == TRANSFER_SPI_MASTER_TRANSFER_ASYNC) {
+        spi_init(&spi, mosi, miso, sclk, ssel);
+        spi_format(&spi, sym_size, spi_mode, 0);
+        spi_frequency(&spi, frequency);
+    } else {
+        if (transfer_type == TRANSFER_SPI_MASTER_SPI_CLASS) {
+            p_spi = new SPI(mosi, miso, sclk, ssel);
+        } else {
+            const spi_pinmap_t explicit_spi_pinmap = {SPI_0, miso, 2, mosi, 2, sclk, 2, ssel, 2};
+            p_spi = new SPI(explicit_spi_pinmap);
+        }
 
-    spi_init(&spi, mosi, miso, sclk, ssel);
-    spi_format(&spi, sym_size, spi_mode, 0);
-    spi_frequency(&spi, frequency);
+        p_spi->format(sym_size, (int)spi_mode);
+        p_spi->frequency(frequency);
+    }
 
     // Configure spi_slave module
     tester.set_mode(spi_mode);
@@ -146,6 +160,16 @@ void spi_test_common(PinName mosi, PinName miso, PinName sclk, PinName ssel, SPI
             break;
 #endif
 
+        case TRANSFER_SPI_MASTER_SPI_CLASS:
+        case TRANSFER_SPI_MASTER_SPI_CLASS_EXPLICIT_PINMAP:
+            for (int i = 0; i < TRANSFER_COUNT; i++) {
+                uint32_t data = p_spi->write((0 - i) & sym_mask);
+                TEST_ASSERT_EQUAL(i & sym_mask, data);
+
+                checksum += (0 - i) & sym_mask;
+            }
+            break;
+
         default:
             TEST_ASSERT_MESSAGE(0, "Unsupported transfer type.");
             break;
@@ -156,7 +180,11 @@ void spi_test_common(PinName mosi, PinName miso, PinName sclk, PinName ssel, SPI
     TEST_ASSERT_EQUAL(TRANSFER_COUNT, tester.get_transfer_count());
     TEST_ASSERT_EQUAL(checksum, tester.get_receive_checksum());
 
-    spi_free(&spi);
+    if (transfer_type == TRANSFER_SPI_MASTER_WRITE_SYNC || transfer_type == TRANSFER_SPI_MASTER_BLOCK_WRITE_SYNC || transfer_type == TRANSFER_SPI_MASTER_TRANSFER_ASYNC) {
+        spi_free(&spi);
+    } else {
+        delete p_spi;
+    }
     tester.reset();
 }
 
@@ -172,6 +200,9 @@ Case cases[] = {
 
     // This will be run for all peripherals
     Case("SPI - basic test", all_peripherals<SPIPort, DefaultFormFactor, spi_test_common<SPITester::Mode0, 8, TRANSFER_SPI_MASTER_WRITE_SYNC, FREQ_1_MHZ> >),
+
+    Case("SPI - SPI class basic test", all_peripherals<SPIPort, DefaultFormFactor, spi_test_common<SPITester::Mode0, 8, TRANSFER_SPI_MASTER_SPI_CLASS, FREQ_1_MHZ> >),
+    Case("SPI - SPI class basic test (explicit pinmap)", all_peripherals<SPIPort, DefaultFormFactor, spi_test_common<SPITester::Mode0, 8, TRANSFER_SPI_MASTER_SPI_CLASS_EXPLICIT_PINMAP, FREQ_1_MHZ> >),
 
     // This will be run for single pin configuration
     Case("SPI - mode testing (MODE_1)", one_peripheral<SPIPort, DefaultFormFactor, spi_test_common<SPITester::Mode1, 8, TRANSFER_SPI_MASTER_WRITE_SYNC, FREQ_1_MHZ> >),
