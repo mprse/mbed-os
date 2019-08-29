@@ -38,6 +38,22 @@
 extern "C" {
 #endif
 
+#define STDIO_UART               UART_3
+
+    // STDIO for console print
+#ifdef MBED_CONF_TARGET_STDIO_UART_TX
+#  define STDIO_UART_TX MBED_CONF_TARGET_STDIO_UART_TX
+#else
+#  define STDIO_UART_TX PD_8
+#  define STDIO_UART_TX_FUNC STM_PIN_DATA(STM_MODE_AF_PP, GPIO_PULLUP, GPIO_AF7_USART3)
+#endif
+#ifdef MBED_CONF_TARGET_STDIO_UART_RX
+#  define STDIO_UART_RX MBED_CONF_TARGET_STDIO_UART_RX
+#else
+#  define STDIO_UART_RX PD_9
+#  define STDIO_UART_RX_FUNC STM_PIN_DATA(STM_MODE_AF_PP, GPIO_PULLUP, GPIO_AF7_USART3)
+#endif
+
 typedef enum {
     ALT0  = 0x100,
     ALT1  = 0x200,
@@ -241,19 +257,6 @@ typedef enum {
     D13         = PA_5,
     D14         = PB_9,
     D15         = PB_8,
-
-    // STDIO for console print
-#ifdef MBED_CONF_TARGET_STDIO_UART_TX
-    STDIO_UART_TX = MBED_CONF_TARGET_STDIO_UART_TX,
-#else
-    STDIO_UART_TX = PD_8,
-#endif
-#ifdef MBED_CONF_TARGET_STDIO_UART_RX
-    STDIO_UART_RX = MBED_CONF_TARGET_STDIO_UART_RX,
-#else
-    STDIO_UART_RX = PD_9,
-#endif
-
     // Generic signals namings
     LED1        = PB_0,  // LD1 = GREEN
     LED2        = PB_7,  // Blue
