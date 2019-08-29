@@ -102,6 +102,15 @@ typedef struct serial_s serial_t;
 
 #endif
 
+typedef struct {
+    const int peripheral;
+    const PinName tx_pin;
+    const int tx_function;
+    const PinName rx_pin;
+    const int rx_function;
+    const uint8_t stdio_config;
+} serial_pinmap_t;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -119,6 +128,15 @@ extern "C" {
  * @param rx  The RX pin name
  */
 void serial_init(serial_t *obj, PinName tx, PinName rx);
+
+/** Initialize the serial peripheral. It sets the default parameters for serial
+ *  peripheral, and configures its specifieds pins.
+ *
+ * @param obj The serial object
+ * @param pinmap  Pinmap pointer to strucure which holds static pinmap
+ */
+void serial_init_direct(serial_t *obj, const serial_pinmap_t *pinmap);
+
 
 /** Release the serial peripheral, not currently invoked. It requires further
  *  resource management.
