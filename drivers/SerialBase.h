@@ -289,6 +289,7 @@ protected:
 #if !defined(DOXYGEN_ONLY)
 protected:
     SerialBase(PinName tx, PinName rx, int baud);
+    SerialBase(const serial_pinmap_t &explicit_pinmap, int baud);
     virtual ~SerialBase();
 
     int _base_getc();
