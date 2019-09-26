@@ -130,8 +130,13 @@ void qspi_prepare_command(const qspi_command_t *command, QSPI_CommandTypeDef *st
     st_command->NbData = 0;
 }
 
-
-qspi_status_t qspi_init(qspi_t *obj, PinName io0, PinName io1, PinName io2, PinName io3, PinName sclk, PinName ssel, uint32_t hz, uint8_t mode)
+#if EXPLICIT_PINMAP_READY
+#define QSPI_INIT_DIRECT qspi_init_direct
+qspi_status_t qspi_init_direct(qspi_t *obj, const qspi_pinmap_t *pinmap, uint32_t hz, uint8_t mode)
+#else
+#define QSPI_INIT_DIRECT _qspi_init_direct
+static qspi_status_t _qspi_init_direct(qspi_t *obj, const qspi_pinmap_t *pinmap, uint32_t hz, uint8_t mode)
+#endif
 {
     // Enable interface clock for QSPI
     __HAL_RCC_QSPI_CLK_ENABLE();
@@ -158,6 +163,35 @@ qspi_status_t qspi_init(qspi_t *obj, PinName io0, PinName io1, PinName io2, PinN
 
     obj->handle.Init.ClockMode = mode == 0 ? QSPI_CLOCK_MODE_0 : QSPI_CLOCK_MODE_3;
 
+    // tested all combinations, take first
+    obj->handle.Instance = (QUADSPI_TypeDef *)pinmap->peripheral;
+
+    // pinmap for pins (enable clock)
+    obj->io0 = pinmap->data0_pin;
+    pin_function(pinmap->data0_pin, pinmap->data0_function);
+    pin_mode(pinmap->data0_pin, PullNone);
+    obj->io1 = pinmap->data1_pin;
+    pin_function(pinmap->data1_pin, pinmap->data1_function);
+    pin_mode(pinmap->data1_pin, PullNone);
+    obj->io2 = pinmap->data2_pin;
+    pin_function(pinmap->data2_pin, pinmap->data2_function);
+    pin_mode(pinmap->data2_pin, PullNone);
+    obj->io3 = pinmap->data3_pin;
+    pin_function(pinmap->data3_pin, pinmap->data3_function);
+    pin_mode(pinmap->data3_pin, PullNone);
+
+    obj->sclk = pinmap->sclk_pin;
+    pin_function(pinmap->sclk_pin, pinmap->sclk_function);
+    pin_mode(pinmap->sclk_pin, PullNone);
+    obj->ssel = pinmap->ssel_pin;
+    pin_function(pinmap->ssel_pin, pinmap->ssel_function);
+    pin_mode(pinmap->ssel_pin, PullNone);
+
+    return qspi_frequency(obj, hz);
+}
+
+qspi_status_t qspi_init(qspi_t *obj, PinName io0, PinName io1, PinName io2, PinName io3, PinName sclk, PinName ssel, uint32_t hz, uint8_t mode)
+{
     QSPIName qspiio0name = (QSPIName)pinmap_peripheral(io0, PinMap_QSPI_DATA0);
     QSPIName qspiio1name = (QSPIName)pinmap_peripheral(io1, PinMap_QSPI_DATA1);
     QSPIName qspiio2name = (QSPIName)pinmap_peripheral(io2, PinMap_QSPI_DATA2);
@@ -174,25 +208,17 @@ qspi_status_t qspi_init(qspi_t *obj, PinName io0, PinName io1, PinName io2, PinN
         return QSPI_STATUS_INVALID_PARAMETER;
     }
 
-    // tested all combinations, take first
-    obj->handle.Instance = (QUADSPI_TypeDef *)qspi_data_first;
+    int peripheral = (int)qspi_data_first;
+    int function_io0 = (int)pinmap_find_function(io0, PinMap_QSPI_DATA0);
+    int function_io1 = (int)pinmap_find_function(io1, PinMap_QSPI_DATA1);
+    int function_io2 = (int)pinmap_find_function(io2, PinMap_QSPI_DATA2);
+    int function_io3 = (int)pinmap_find_function(io3, PinMap_QSPI_DATA3);
+    int function_sclk = (int)pinmap_find_function(sclk, PinMap_QSPI_SCLK);
+    int function_ssel = (int)pinmap_find_function(ssel, PinMap_QSPI_SSEL);
 
-    // pinmap for pins (enable clock)
-    obj->io0 = io0;
-    pinmap_pinout(io0, PinMap_QSPI_DATA0);
-    obj->io1 = io1;
-    pinmap_pinout(io1, PinMap_QSPI_DATA1);
-    obj->io2 = io2;
-    pinmap_pinout(io2, PinMap_QSPI_DATA2);
-    obj->io3 = io3;
-    pinmap_pinout(io3, PinMap_QSPI_DATA3);
+    const qspi_pinmap_t explicit_pinmap = {peripheral, io0, function_io0, io1, function_io1, io2, function_io2, io3, function_io3, sclk, function_sclk, ssel, function_ssel};
 
-    obj->sclk = sclk;
-    pinmap_pinout(sclk, PinMap_QSPI_SCLK);
-    obj->ssel = ssel;
-    pinmap_pinout(ssel, PinMap_QSPI_SSEL);
-
-    return qspi_frequency(obj, hz);
+    QSPI_INIT_DIRECT(obj, &explicit_pinmap, hz, mode);
 }
 
 qspi_status_t qspi_free(qspi_t *obj)
