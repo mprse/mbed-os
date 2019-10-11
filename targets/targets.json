@@ -2622,6 +2622,9 @@
             "FLASH",
             "MPU"
         ],
+        "device_has_remove": [
+            "SPI_ASYNCH"
+         ],
         "release_versions": ["2", "5"],
         "device_name": "STM32F411RE",
         "bootloader_supported": true
