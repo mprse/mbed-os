@@ -162,6 +162,10 @@ static kvstore_config_t kvstore_config;
 #define _GET_BLOCKDEVICE_concat(dev, ...) _get_blockdevice_##dev(__VA_ARGS__)
 #define GET_BLOCKDEVICE(dev, ...) _GET_BLOCKDEVICE_concat(dev, __VA_ARGS__)
 
+#if (STATIC_PINMAP_READY)
+constexpr spi_pinmap_t static_spi_pinmap = get_spi_pinmap(MBED_CONF_SD_SPI_MOSI, MBED_CONF_SD_SPI_MISO, MBED_CONF_SD_SPI_CLK, NC);
+#endif
+
 static inline uint32_t align_up(uint64_t val, uint64_t size)
 {
     return (((val - 1) / size) + 1) * size;
@@ -564,12 +568,19 @@ BlockDevice *_get_blockdevice_SD(bd_addr_t start_address, bd_size_t size)
     bd_addr_t aligned_end_address;
     bd_addr_t aligned_start_address;
 
+#if (STATIC_PINMAP_READY)
+    static SDBlockDevice bd(
+        static_spi_pinmap,
+        MBED_CONF_SD_SPI_CS
+    );
+#else
     static SDBlockDevice bd(
         MBED_CONF_SD_SPI_MOSI,
         MBED_CONF_SD_SPI_MISO,
         MBED_CONF_SD_SPI_CLK,
         MBED_CONF_SD_SPI_CS
     );
+#endif
 
     if (bd.init() != MBED_SUCCESS) {
         tr_error("KV Config: SDBlockDevice init fail");

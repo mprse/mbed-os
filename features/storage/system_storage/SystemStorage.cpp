@@ -47,7 +47,9 @@
 
 using namespace mbed;
 
-
+#if (STATIC_PINMAP_READY)
+constexpr spi_pinmap_t static_spi_pinmap = get_spi_pinmap(MBED_CONF_SD_SPI_MOSI, MBED_CONF_SD_SPI_MISO, MBED_CONF_SD_SPI_CLK, NC);
+#endif
 
 MBED_WEAK int avoid_conflict_nvstore_tdbstore(owner_type_e in_mem_owner)
 {
@@ -136,12 +138,19 @@ MBED_WEAK BlockDevice *BlockDevice::get_default_instance()
 
 #elif COMPONENT_SD
 
+#if (STATIC_PINMAP_READY)
+    static SDBlockDevice default_bd(
+        static_spi_pinmap,
+        MBED_CONF_SD_SPI_CS
+    );
+#else
     static SDBlockDevice default_bd(
         MBED_CONF_SD_SPI_MOSI,
         MBED_CONF_SD_SPI_MISO,
         MBED_CONF_SD_SPI_CLK,
         MBED_CONF_SD_SPI_CS
     );
+#endif
 
     return &default_bd;
 
